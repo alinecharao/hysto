@@ -14,7 +14,77 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      characters: {
+        Row: {
+          avatar: string
+          created_at: string
+          greeting: string
+          id: string
+          instructions: string
+          name: string
+          personality: string
+          tagline: string
+          user_id: string | null
+        }
+        Insert: {
+          avatar?: string
+          created_at?: string
+          greeting?: string
+          id?: string
+          instructions?: string
+          name: string
+          personality?: string
+          tagline?: string
+          user_id?: string | null
+        }
+        Update: {
+          avatar?: string
+          created_at?: string
+          greeting?: string
+          id?: string
+          instructions?: string
+          name?: string
+          personality?: string
+          tagline?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          character_id: string
+          content: string
+          created_at: string
+          id: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          content: string
+          created_at?: string
+          id?: string
+          role: string
+          user_id?: string
+        }
+        Update: {
+          character_id?: string
+          content?: string
+          created_at?: string
+          id?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
