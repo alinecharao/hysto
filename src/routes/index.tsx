@@ -1,24 +1,37 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Persona — Converse com personagens de IA" },
+      { name: "description", content: "Chat em texto com personagens de IA de personalidades únicas. Crie os seus." },
+      { property: "og:title", content: "Persona — Converse com personagens de IA" },
+      { property: "og:description", content: "Chat em texto com personagens de IA de personalidades únicas. Crie os seus." },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) navigate({ to: "/characters", replace: true });
+    });
+  }, [navigate]);
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
+    <div className="flex min-h-screen flex-col items-center justify-center px-5 text-center">
+      <div className="mb-6 text-5xl">🌙 🏴‍☠️ 🔍 🧙</div>
+      <h1 className="font-display text-6xl italic text-primary md:text-7xl">Persona</h1>
+      <p className="mt-4 max-w-md text-lg text-muted-foreground">
+        Converse com personagens de IA, cada um com sua própria personalidade — ou crie os seus.
+      </p>
+      <Link to="/auth" className="mt-8 rounded-full bg-primary px-8 py-3 font-semibold text-primary-foreground hover:opacity-90">
+        Começar
+      </Link>
     </div>
   );
 }
