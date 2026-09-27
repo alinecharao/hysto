@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { charactersQuery } from "@/lib/characters";
+import { charactersQuery, type Character } from "@/lib/characters";
 
 export const Route = createFileRoute("/_authenticated/characters/")({
   head: () => ({
@@ -50,7 +50,7 @@ function Section({
   editable,
 }: {
   title: string;
-  items: ReturnType<typeof useSuspenseQuery<typeof charactersQuery>>["data"] extends infer T ? T : never;
+  items: Character[];
   editable?: boolean;
 }) {
   return (
