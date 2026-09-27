@@ -65,8 +65,8 @@ function ChatWindow({
         },
         prepareSendMessagesRequest: ({ messages, headers }) => {
           const last = messages[messages.length - 1];
-          const text = last.parts.map((p) => (p.type === "text" ? p.text : "")).join("");
-          return { headers, body: { characterId: character.id, text } };
+          const text = (last?.parts ?? []).map((p) => (p.type === "text" ? p.text : "")).join("");
+          return { ...(headers ? { headers } : {}), body: { characterId: character.id, text } };
         },
       }),
     [character.id],
