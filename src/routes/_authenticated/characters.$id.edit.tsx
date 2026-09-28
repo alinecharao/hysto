@@ -7,9 +7,9 @@ import { characterQuery } from "@/lib/characters";
 export const Route = createFileRoute("/_authenticated/characters/$id/edit")({
   head: () => ({
     meta: [
-      { title: "Editar personagem — Persona" },
+      { title: "Editar personagem — Hysto" },
       { name: "description", content: "Ajuste a personalidade e as instruções do personagem." },
-      { property: "og:title", content: "Editar personagem — Persona" },
+      { property: "og:title", content: "Editar personagem — Hysto" },
       { property: "og:description", content: "Ajuste a personalidade e as instruções do personagem." },
     ],
   }),
