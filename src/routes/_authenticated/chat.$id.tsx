@@ -3,7 +3,7 @@ import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { ChevronLeft, Ellipsis, Info, Pencil, Trash2 } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import lunaPortrait from "@/assets/luna-portrait.jpg";
@@ -48,6 +49,15 @@ export const Route = createFileRoute("/_authenticated/chat/$id")({
   component: ChatPage,
 });
 
+type AiProvider = "auto" | "gemini" | "groq" | "openrouter";
+
+const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
+  auto: "Automático",
+  gemini: "Gemini",
+  groq: "Groq",
+  openrouter: "OpenRouter",
+};
+
 const presetPortraits: Record<string, string> = {
   "Luna Corvo": lunaPortrait,
   "Capitão Rex": rexPortrait,
@@ -78,8 +88,23 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   const [input, setInput] = useState("");
   const [showThoughts, setShowThoughts] = useState(true);
   const [openInfo, setOpenInfo] = useState(false);
+  const [aiProvider, setAiProvider] = useState<AiProvider>("auto");
   const thoughtsRef = useRef(showThoughts);
+  const aiProviderRef = useRef<AiProvider>(aiProvider);
   thoughtsRef.current = showThoughts;
+  aiProviderRef.current = aiProvider;
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("hysto-ai-provider");
+    if (saved === "auto" || saved === "gemini" || saved === "groq" || saved === "openrouter") {
+      setAiProvider(saved);
+    }
+  }, []);
+
+  const changeAiProvider = (value: AiProvider) => {
+    setAiProvider(value);
+    window.localStorage.setItem("hysto-ai-provider", value);
+  };
   const image = characterImage(character);
 
   const initial = useMemo<UIMessage[]>(
@@ -96,7 +121,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
       prepareSendMessagesRequest: ({ messages, headers }) => {
         const last = messages[messages.length - 1];
         const text = (last?.parts ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
-        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current } };
+        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current, provider: aiProviderRef.current } };
       },
     }),
     [character.id],
@@ -164,6 +189,18 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 sm:py-4">
           <div className="mx-auto max-w-3xl space-y-2">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <Select value={aiProvider} onValueChange={(value) => changeAiProvider(value as AiProvider)}>
+                <SelectTrigger className="h-8 w-[138px] shrink-0 rounded-full border-primary/35 bg-chat-glass px-3 text-xs">
+                  <span className="mr-1">✨</span>
+                  <SelectValue>{AI_PROVIDER_LABELS[aiProvider]}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="auto">✨ Automático</SelectItem>
+                  <SelectItem value="gemini">Gemini</SelectItem>
+                  <SelectItem value="groq">Groq</SelectItem>
+                  <SelectItem value="openrouter">OpenRouter</SelectItem>
+                </SelectContent>
+              </Select>
               {SCENE_COMMANDS.map((command) => (
                 <Button key={command.id} type="button" variant="outline" size="sm" disabled={busy} onClick={() => sendMessage({ text: commandMarker(command.id) })} className="shrink-0 rounded-full border-primary/35 bg-chat-glass text-xs">
                   <span>{command.icon}</span>{command.label}
