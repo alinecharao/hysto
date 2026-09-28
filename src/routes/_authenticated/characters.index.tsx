@@ -6,10 +6,10 @@ export const Route = createFileRoute("/_authenticated/characters/")({
   },
   head: () => ({
     meta: [
-      { title: "Redirecionando — Persona" },
-      { name: "description", content: "Abrindo o painel de histórias do Persona." },
-      { property: "og:title", content: "Redirecionando — Persona" },
-      { property: "og:description", content: "Abrindo o painel de histórias do Persona." },
+      { title: "Redirecionando — Hysto" },
+      { name: "description", content: "Abrindo o painel de histórias do Hysto." },
+      { property: "og:title", content: "Redirecionando — Hysto" },
+      { property: "og:description", content: "Abrindo o painel de histórias do Hysto." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
     ],
