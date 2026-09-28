@@ -155,7 +155,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
             {messages.map((message) => (
               <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
             ))}
-            {status === "submitted" && <Shimmer className="pl-2 text-sm">{character.name} está escrevendo...</Shimmer>}
+            {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
             {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error.message || "Não foi possível obter resposta."}</p>}
           </ConversationContent>
           <ConversationScrollButton />
