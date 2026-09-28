@@ -5,10 +5,12 @@ import { charactersQuery, type Character } from "@/lib/characters";
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Personagens — Persona" },
-      { name: "description", content: "Escolha um personagem de IA para conversar." },
-      { property: "og:title", content: "Personagens — Persona" },
-      { property: "og:description", content: "Escolha um personagem de IA para conversar." },
+      { title: "Histórias — Persona" },
+      { name: "description", content: "Acesse todas as suas histórias e personagens de IA." },
+      { property: "og:title", content: "Histórias — Persona" },
+      { property: "og:description", content: "Acesse todas as suas histórias e personagens de IA." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   loader: ({ context }) => context.queryClient.ensureQueryData(charactersQuery),
@@ -26,8 +28,8 @@ function Catalog() {
       <div className="mx-auto max-w-5xl px-5 py-10">
         <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="font-display text-4xl md:text-5xl">Com quem vamos conversar?</h1>
-            <p className="mt-2 text-muted-foreground">Escolha um personagem ou crie o seu.</p>
+            <h1 className="font-display text-4xl md:text-5xl">Todas as histórias</h1>
+            <p className="mt-2 text-muted-foreground">Escolha uma história para continuar ou crie um personagem.</p>
           </div>
           <Link
             to="/characters/new"

@@ -129,7 +129,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
 
         <header className="relative z-20 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/50 bg-background/80 px-3 backdrop-blur-xl sm:h-auto sm:px-5 sm:py-3">
           <Button asChild variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Voltar ao catálogo">
-            <Link to="/characters"><ChevronLeft /></Link>
+            <Link to="/dashboard"><ChevronLeft /></Link>
           </Button>
           <button type="button" onClick={() => setOpenInfo(true)} className="flex min-w-0 items-center justify-center gap-2 text-left" aria-label={`Abrir cartão de ${character.name}`}>
             <Avatar character={character} className="size-8 text-base" />
