@@ -151,17 +151,15 @@ export const Route = createFileRoute("/api/chat")({
         const recent = full.slice(-WINDOW);
         const trimmed = full.length > WINDOW;
 
+        const contextNote = trimmed
+          ? `CONTEXTO REDUZIDO: ${full.length - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.`
+          : "";
+
+        const effectiveSystem = [system, contextNote].filter(Boolean).join("\n\n");
+
         const messages: ModelMessage[] = [
           ...(character.opening_scene
             ? [{ role: "assistant" as const, content: character.opening_scene }]
-            : []),
-          ...(trimmed
-            ? [
-                {
-                  role: "system" as const,
-                  content: `(${full.length - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.)`,
-                },
-              ]
             : []),
           ...recent.map((m) => ({
             role: m.role as "user" | "assistant",
@@ -244,7 +242,7 @@ export const Route = createFileRoute("/api/chat")({
 
         const result = streamText({
           model: provider.chat("hysto-router"),
-          system,
+          system: effectiveSystem,
           messages,
           abortSignal: request.signal,
           maxOutputTokens: 1100,
