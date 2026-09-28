@@ -32,9 +32,9 @@ import {
 export const Route = createFileRoute("/_authenticated/chat/$id")({
   head: () => ({
     meta: [
-      { title: "Conversa — Persona" },
+      { title: "Conversa — Hysto" },
       { name: "description", content: "Converse em texto com seu personagem de IA." },
-      { property: "og:title", content: "Conversa — Persona" },
+      { property: "og:title", content: "Conversa — Hysto" },
       { property: "og:description", content: "Converse em texto com seu personagem de IA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
