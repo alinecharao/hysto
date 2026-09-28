@@ -22,7 +22,7 @@ function NewCharacter() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-xl px-5 py-10">
-        <Link to="/characters" className="text-sm text-muted-foreground hover:text-foreground">← Voltar</Link>
+        <Link to="/dashboard" className="text-sm text-muted-foreground hover:text-foreground">← Voltar</Link>
         <h1 className="mb-8 mt-3 font-display text-4xl">Novo personagem</h1>
         <CharacterForm
           submitLabel="Criar"

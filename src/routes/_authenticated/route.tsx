@@ -25,7 +25,7 @@ function Layout() {
   return (
     <div className="flex h-screen flex-col">
       <header className={`${isChat ? "hidden sm:flex" : "flex"} shrink-0 items-center justify-between border-b border-border px-5 py-3`}>
-        <Link to="/characters" className="font-display text-xl italic text-primary">
+        <Link to="/dashboard" className="font-display text-xl italic text-primary">
           Persona
         </Link>
         <div className="flex items-center gap-4 text-sm">

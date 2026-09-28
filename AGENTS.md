@@ -13,3 +13,4 @@
 - Chat streams via `src/routes/api/chat.ts` (server route, bearer-token auth); server loads history from `messages` and persists both turns — client sends only the new text.
 - Preset characters have `user_id NULL` (readable by all signed-in users); user characters are owner-only via RLS.
 - Signed-in pages live under `src/routes/_authenticated/` (client-only gate redirecting to `/auth`).
+- `/` redirects to `/auth`; successful authentication opens `/dashboard`, the canonical catalog of all stories.

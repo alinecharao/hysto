@@ -10,6 +10,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Entre para conversar com seus personagens de IA." },
       { property: "og:title", content: "Entrar — Persona" },
       { property: "og:description", content: "Entre para conversar com seus personagens de IA." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,
@@ -25,10 +27,10 @@ function AuthPage() {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/characters", replace: true });
+      if (data.session) navigate({ to: "/dashboard", replace: true });
     });
     const { data } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (session) navigate({ to: "/characters", replace: true });
+      if (session) navigate({ to: "/dashboard", replace: true });
     });
     return () => data.subscription.unsubscribe();
   }, [navigate]);
@@ -53,7 +55,7 @@ function AuthPage() {
   }
 
   async function google() {
-    const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: window.location.origin });
+    const r = await lovable.auth.signInWithOAuth("google", { redirect_uri: `${window.location.origin}/auth` });
     if (r.error) setMsg(r.error.message);
   }
 
