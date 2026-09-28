@@ -11,7 +11,7 @@ const json = (status: number, error: string) =>
   });
 
 
-type AiProvider = "auto" | "gemini" | "groq" | "openrouter";
+type AiProvider = "auto" | "gemini" | "groq" | "openrouter" | "kimi" | "openai";
 type ConcreteProvider = Exclude<AiProvider, "auto">;
 
 type ProviderConfig = {
@@ -61,6 +61,24 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
             "HTTP-Referer": origin,
             "X-Title": "Hysto",
           },
+        }
+      : null,
+    process.env["KIMI_API_KEY"]
+      ? {
+          id: "kimi",
+          label: "Kimi",
+          apiKey: process.env["KIMI_API_KEY"]!,
+          baseURL: process.env["KIMI_BASE_URL"] || "https://api.moonshot.ai/v1",
+          models: [process.env["KIMI_MODEL"] || "kimi-k2.5"],
+        }
+      : null,
+    process.env["OPENAI_API_KEY"]
+      ? {
+          id: "openai",
+          label: "OpenAI",
+          apiKey: process.env["OPENAI_API_KEY"]!,
+          baseURL: "https://api.openai.com/v1",
+          models: [process.env["OPENAI_MODEL"] || "gpt-5.6-luna"],
         }
       : null,
   ];
@@ -174,7 +192,7 @@ export const Route = createFileRoute("/api/chat")({
 
 
         const requestedProvider: AiProvider =
-          body.provider === "gemini" || body.provider === "groq" || body.provider === "openrouter"
+          body.provider === "gemini" || body.provider === "groq" || body.provider === "openrouter" || body.provider === "kimi" || body.provider === "openai"
             ? body.provider
             : "auto";
 
@@ -182,7 +200,7 @@ export const Route = createFileRoute("/api/chat")({
         if (configuredProviders.length === 0) {
           return json(
             500,
-            "Nenhum provedor de IA está configurado. Adicione GEMINI_API_KEY, GROQ_API_KEY ou OPENROUTER_API_KEY.",
+            "Nenhum provedor de IA está configurado. Adicione GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, KIMI_API_KEY ou OPENAI_API_KEY.",
           );
         }
 
