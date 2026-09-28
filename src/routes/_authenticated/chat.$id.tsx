@@ -233,7 +233,7 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
   if (role === "user") {
     const command = parseCommand(text);
     if (command) return <div className="flex justify-center"><span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">{command.icon} {command.label}</span></div>;
-    return <Message from="user"><MessageContent className="rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent></Message>;
+    return <Message from="user"><MessageContent className="whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent></Message>;
   }
   const segments = parseNarrativeSegments(text);
   return (
@@ -241,9 +241,9 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
       <MessageContent className="w-full gap-4 rounded-3xl border border-border/30 bg-chat-panel px-5 py-5 shadow-xl backdrop-blur-md sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
         {segments.map((segment, index) =>
           segment.type === "thought" ? (
-            showThoughts && <div key={`${segment.type}-${index}`} className="border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground">{segment.text}</div>
+            showThoughts && <div key={`${segment.type}-${index}`} className="whitespace-pre-wrap break-words border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground">{segment.text}</div>
           ) : (
-            <MessageResponse key={`${segment.type}-${index}`} className="prose-chat text-[17px] leading-[1.55] sm:text-[15px]">{segment.text}</MessageResponse>
+            <MessageResponse key={`${segment.type}-${index}`} className="prose-chat whitespace-pre-wrap break-words text-[17px] leading-[1.55] sm:text-[15px]">{segment.text}</MessageResponse>
           ),
         )}
       </MessageContent>
