@@ -124,3 +124,29 @@
 .prose-chat strong { color: var(--color-primary); font-weight: 600; }
 .prose-chat ul, .prose-chat ol { padding-left: 1.25em; margin: 0 0 0.75em; list-style: disc; }
 .prose-chat code { background: var(--color-secondary); padding: 0.1em 0.35em; border-radius: 0.3em; }
+
+
+@layer base {
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  html {
+    background-color: var(--color-background);
+    overscroll-behavior: none;
+  }
+
+  body {
+    min-height: 100dvh;
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  @media (display-mode: standalone) {
+    body {
+      min-height: 100svh;
+    }
+  }
+}
