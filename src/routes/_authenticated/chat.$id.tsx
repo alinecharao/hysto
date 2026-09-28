@@ -161,7 +161,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
           <ConversationScrollButton />
         </Conversation>
 
-        <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 sm:py-4">
+        <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 sm:py-4">
           <div className="mx-auto max-w-3xl space-y-2">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {SCENE_COMMANDS.map((command) => (
