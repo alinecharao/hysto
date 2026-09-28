@@ -191,7 +191,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                 status={status}
                 onStop={stop}
                 disabled={!busy && !input.trim()}
-                className="absolute bottom-2 right-2 z-10 size-10 shrink-0 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
+                className="absolute bottom-3 right-5 z-10 size-10 shrink-0 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
               />
             </PromptInput>
           </div>
