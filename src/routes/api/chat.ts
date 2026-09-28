@@ -19,7 +19,7 @@ type ProviderConfig = {
   label: string;
   apiKey: string;
   baseURL: string;
-  model: string;
+  models: string[];
   headers?: Record<string, string>;
 };
 
@@ -34,7 +34,11 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
           label: "Gemini",
           apiKey: process.env["GEMINI_API_KEY"]!,
           baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
-          model: process.env["GEMINI_MODEL"] || "gemini-3.8-flash",
+          models: [
+            process.env["GEMINI_MODEL"] || "gemini-3.8-flash",
+            "gemini-3.5-flash",
+            "gemini-3.1-flash-lite",
+          ],
         }
       : null,
     process.env["GROQ_API_KEY"]
@@ -43,7 +47,7 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
           label: "Groq",
           apiKey: process.env["GROQ_API_KEY"]!,
           baseURL: "https://api.groq.com/openai/v1",
-          model: process.env["GROQ_MODEL"] || "openai/gpt-oss-20b",
+          models: [process.env["GROQ_MODEL"] || "openai/gpt-oss-20b"],
         }
       : null,
     process.env["OPENROUTER_API_KEY"]
@@ -52,7 +56,7 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
           label: "OpenRouter",
           apiKey: process.env["OPENROUTER_API_KEY"]!,
           baseURL: "https://openrouter.ai/api/v1",
-          model: process.env["OPENROUTER_MODEL"] || "openrouter/free",
+          models: [process.env["OPENROUTER_MODEL"] || "openrouter/free"],
           headers: {
             "HTTP-Referer": origin,
             "X-Title": "Hysto",
@@ -213,21 +217,25 @@ export const Route = createFileRoute("/api/chat")({
               headers.set(name, value);
             }
 
-            const response = await fetch(`${provider.baseURL}/chat/completions`, {
-              ...init,
-              headers,
-              body: JSON.stringify({ ...originalBody, model: provider.model }),
-            });
+            for (const model of provider.models) {
+              const response = await fetch(`${provider.baseURL}/chat/completions`, {
+                ...init,
+                headers,
+                body: JSON.stringify({ ...originalBody, model }),
+              });
 
-            if (response.ok) return response;
+              if (response.ok) return response;
 
-            lastResponse = response;
+              lastResponse = response;
 
-            if (
-              requestedProvider !== "auto" ||
-              !RETRYABLE_PROVIDER_STATUS.has(response.status)
-            ) {
-              return response;
+              if (!RETRYABLE_PROVIDER_STATUS.has(response.status)) {
+                return response;
+              }
+
+              // In manual mode, stay inside the chosen provider but allow
+              // fallback to its alternate models (for example Gemini).
+              // In automatic mode, exhaust this provider's models, then move
+              // to the next configured provider.
             }
           }
 
