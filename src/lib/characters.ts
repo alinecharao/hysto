@@ -21,13 +21,25 @@ export function parseCommand(text: string) {
   return SCENE_COMMANDS.find((c) => c.id === m[1]) ?? null;
 }
 
-export function splitThought(text: string) {
-  const open = text.indexOf("<thought>");
-  if (open === -1) return { thought: "", body: text };
-  const close = text.indexOf("</thought>");
-  const thought = (close === -1 ? text.slice(open + 9) : text.slice(open + 9, close)).trim();
-  const body = (close === -1 ? "" : text.slice(0, open) + text.slice(close + 10)).trim();
-  return { thought, body };
+export type NarrativeSegment = { type: "body" | "thought"; text: string };
+
+export function parseNarrativeSegments(text: string): NarrativeSegment[] {
+  const segments: NarrativeSegment[] = [];
+  const thoughtPattern = /<thought>([\s\S]*?)(?:<\/thought>|$)/g;
+  let cursor = 0;
+
+  for (const match of text.matchAll(thoughtPattern)) {
+    const start = match.index ?? 0;
+    const body = text.slice(cursor, start).trim();
+    const thought = (match[1] ?? "").trim();
+    if (body) segments.push({ type: "body", text: body });
+    if (thought) segments.push({ type: "thought", text: thought });
+    cursor = start + match[0].length;
+  }
+
+  const remaining = text.slice(cursor).trim();
+  if (remaining) segments.push({ type: "body", text: remaining });
+  return segments.length ? segments : [{ type: "body", text }];
 }
 
 export const charactersQuery = queryOptions({
