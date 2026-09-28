@@ -77,7 +77,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" },
-      { title: "Persona" },
+      { title: "Hysto" },
       { name: "description", content: "Chat com personagens de IA" },
       { name: "theme-color", content: "#120e0c" },
       { name: "mobile-web-app-capable", content: "yes" },
