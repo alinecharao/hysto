@@ -23,7 +23,7 @@ type ProviderConfig = {
   headers?: Record<string, string>;
 };
 
-const RETRYABLE_PROVIDER_STATUS = new Set([402, 404, 408, 429, 500, 502, 503, 504]);
+const RETRYABLE_PROVIDER_STATUS = new Set([401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504]);
 
 function getProviderConfigs(request: Request): ProviderConfig[] {
   const origin = new URL(request.url).origin;
@@ -236,10 +236,43 @@ export const Route = createFileRoute("/api/chat")({
             }
 
             for (const model of provider.models) {
+              let requestBody: Record<string, unknown> = { ...originalBody, model };
+
+              // Groq's free/on-demand TPM is relatively small. Keep the
+              // permanent system prompt, but trim conversational history only
+              // for Groq so larger story messages still fit without weakening
+              // the other providers.
+              if (provider.id === "groq" && Array.isArray(originalBody.messages)) {
+                const promptMessages = originalBody.messages.filter(
+                  (message): message is Record<string, unknown> =>
+                    Boolean(message) && typeof message === "object",
+                );
+                const systemMessages = promptMessages.filter(
+                  (message) => message.role === "system",
+                );
+                const conversationMessages = promptMessages.filter(
+                  (message) => message.role !== "system",
+                );
+
+                requestBody = {
+                  ...requestBody,
+                  messages: [
+                    ...systemMessages.slice(0, 1),
+                    ...conversationMessages.slice(-8),
+                  ],
+                  max_tokens: Math.min(
+                    typeof originalBody.max_tokens === "number"
+                      ? originalBody.max_tokens
+                      : 900,
+                    900,
+                  ),
+                };
+              }
+
               const response = await fetch(`${provider.baseURL}/chat/completions`, {
                 ...init,
                 headers,
-                body: JSON.stringify({ ...originalBody, model }),
+                body: JSON.stringify(requestBody),
               });
 
               if (response.ok) return response;
@@ -250,10 +283,9 @@ export const Route = createFileRoute("/api/chat")({
                 return response;
               }
 
-              // In manual mode, stay inside the chosen provider but allow
-              // fallback to its alternate models (for example Gemini).
-              // In automatic mode, exhaust this provider's models, then move
-              // to the next configured provider.
+              // Retry alternate models inside the provider first. In automatic
+              // mode, provider-level quota/size/capacity failures then fall
+              // through to the next configured provider.
             }
           }
 
