@@ -978,9 +978,13 @@ export const PromptInputTextarea = ({
         if (isComposing || e.nativeEvent.isComposing) {
           return;
         }
-        if (e.shiftKey) {
+
+        // Enter always inserts a line break. Use Ctrl+Enter or Cmd+Enter
+        // as an optional keyboard shortcut to submit on desktop.
+        if (!e.ctrlKey && !e.metaKey) {
           return;
         }
+
         e.preventDefault();
 
         // Check if the submit button is disabled before submitting
