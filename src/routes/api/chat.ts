@@ -92,7 +92,7 @@ export const Route = createFileRoute("/api/chat")({
           "ESTILO: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas (o que se mostra e o que se esconde). Ações e narração em *itálico*; falas em texto normal entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes; nunca entregue a resposta como um bloco contínuo de texto. Termine sempre num ponto que dê espaço para o usuário reagir. Nunca escreva falas ou pensamentos no lugar do usuário.",
           "CONTINUIDADE: mantenha coerência com tudo o que já aconteceu — nomes, promessas, ferimentos, mudanças de relação, hora e lugar. Nunca contradiga o FUNDO nem repita cenas já vividas.",
           body.thoughts
-            ? "PENSAMENTO: comece cada resposta com o monólogo interno do personagem dentro de <thought>...</thought> (1 a 3 frases, primeira pessoa, sincero, pode divergir do que ele diz em voz alta). Depois feche a tag e escreva a cena normalmente."
+            ? "PENSAMENTO: insira o monólogo interno do personagem dentro de <thought>...</thought> exatamente no ponto da cena em que ele surge — normalmente depois da ação, percepção ou fala que o provoca. Não coloque o pensamento automaticamente no início. Você pode intercalá-lo entre narração e falas, usando no total 1 a 3 frases em primeira pessoa, sinceras e que podem divergir do que o personagem diz em voz alta."
             : "Não escreva blocos <thought>. Mantenha o monólogo interno implícito na narração.",
           "Responda apenas em texto (sem imagens, áudio ou vídeo), em português do Brasil, a não ser que o usuário escreva em outro idioma.",
         ]
