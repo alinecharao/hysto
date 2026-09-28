@@ -161,7 +161,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
           <ConversationScrollButton />
         </Conversation>
 
-        <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 sm:py-4">
+        <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 sm:py-4">
           <div className="mx-auto max-w-3xl space-y-2">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               {SCENE_COMMANDS.map((command) => (
@@ -237,7 +237,7 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
   }
   const segments = parseNarrativeSegments(text);
   return (
-    <Message from="assistant" className="mx-auto max-w-[calc(100%-1rem)] sm:max-w-[calc(100%-2rem)]">
+    <Message from="assistant" className="max-w-full">
       <MessageContent className="w-full gap-4 rounded-3xl border border-border/30 bg-chat-panel px-5 py-5 shadow-xl backdrop-blur-md sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
         {segments.map((segment, index) =>
           segment.type === "thought" ? (
