@@ -125,7 +125,7 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         const result = streamText({
-          model: provider.chat("gemini-3.5-flash-lite"),
+          model: provider.chat("gemini-3.6-flash"),
           system,
           messages,
           abortSignal: request.signal,
