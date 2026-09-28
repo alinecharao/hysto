@@ -6,9 +6,9 @@ import { lovable } from "@/integrations/lovable/index";
 export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
-      { title: "Entrar — Persona" },
+      { title: "Entrar — Hysto" },
       { name: "description", content: "Entre para conversar com seus personagens de IA." },
-      { property: "og:title", content: "Entrar — Persona" },
+      { property: "og:title", content: "Entrar — Hysto" },
       { property: "og:description", content: "Entre para conversar com seus personagens de IA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -64,7 +64,7 @@ function AuthPage() {
   return (
     <div className="flex min-h-screen items-center justify-center px-5">
       <div className="w-full max-w-sm">
-        <h1 className="text-center font-display text-5xl italic text-primary">Persona</h1>
+        <h1 className="text-center font-display text-5xl italic text-primary">Hysto</h1>
         <p className="mb-8 mt-2 text-center text-sm text-muted-foreground">
           {mode === "in" ? "Entre para continuar suas conversas" : "Crie sua conta"}
         </p>
