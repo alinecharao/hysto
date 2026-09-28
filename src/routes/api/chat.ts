@@ -3,11 +3,6 @@ import { createClient } from "@supabase/supabase-js";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, type ModelMessage } from "ai";
 import type { Database } from "@/integrations/supabase/types";
-import {
-  createLovableAiGatewayRunIdFetch,
-  getLovableAiGatewayRunId,
-  withLovableAiGatewayRunIdHeader,
-} from "@/lib/ai/run-id.server";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), {
@@ -21,8 +16,8 @@ export const Route = createFileRoute("/api/chat")({
       POST: async ({ request }) => {
         const url = process.env["SUPABASE_URL"]!;
         const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-        const apiKey = process.env["LOVABLE_API_KEY"];
-        if (!apiKey) return json(500, "Chave de IA não configurada.");
+        const apiKey = process.env["GEMINI_API_KEY"];
+        if (!apiKey) return json(500, "Chave do Gemini não configurada.");
 
         const token = request.headers.get("authorization")?.replace("Bearer ", "");
         if (!token) return json(401, "Não autenticado.");
@@ -100,7 +95,7 @@ export const Route = createFileRoute("/api/chat")({
           .join("\n\n");
 
         const full = history ?? [];
-        const WINDOW = 40;
+        const WINDOW = 24;
         const recent = full.slice(-WINDOW);
         const trimmed = full.length > WINDOW;
 
@@ -112,7 +107,7 @@ export const Route = createFileRoute("/api/chat")({
             ? [
                 {
                   role: "system" as const,
-                  content: `(${full.length - recent.length} mensagens anteriores foram resumidas por limite de memória. Mantenha a continuidade do que ficou estabelecido no FUNDO e nas mensagens recentes.)`,
+                  content: `(${full.length - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.)`,
                 },
               ]
             : []),
@@ -124,28 +119,18 @@ export const Route = createFileRoute("/api/chat")({
         ];
 
 
-        const runIdFetch = createLovableAiGatewayRunIdFetch(getLovableAiGatewayRunId(request));
         const provider = createOpenAI({
-          baseURL: "https://ai.gateway.lovable.dev/v1",
+          baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
           apiKey,
-          headers: { "Lovable-API-Key": apiKey, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-          fetch: runIdFetch.fetch,
         });
 
         const result = streamText({
-          model: provider.responses("openai/gpt-6-astra"),
+          model: provider.chat("gemini-3.5-flash-lite"),
           system,
           messages,
           abortSignal: request.signal,
-          providerOptions: {
-            openai: {
-              forceReasoning: true,
-              reasoningEffort: "low",
-              reasoningSummary: "auto",
-              store: false,
-              include: ["reasoning.encrypted_content"],
-            },
-          },
+          maxOutputTokens: 1400,
+          temperature: 0.9,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
             const { error } = await supabase.from("messages").insert({
@@ -158,12 +143,9 @@ export const Route = createFileRoute("/api/chat")({
           },
         });
 
-        return withLovableAiGatewayRunIdHeader(
-          result.toUIMessageStreamResponse({
-            onError: (e) => (e instanceof Error ? e.message : "Erro ao gerar resposta."),
-          }),
-          runIdFetch,
-        );
+        return result.toUIMessageStreamResponse({
+          onError: (e) => (e instanceof Error ? e.message : "Erro ao gerar resposta."),
+        });
       },
     },
   },
