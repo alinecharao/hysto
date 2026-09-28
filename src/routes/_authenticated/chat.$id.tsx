@@ -185,13 +185,13 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Escreva sua mensagem..."
-                className="min-h-14 max-h-36 overflow-y-auto py-4 pl-4 pr-16 text-base leading-6"
+                className="min-h-14 max-h-36 overflow-y-auto py-4 pl-4 pr-3 text-base leading-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               />
               <PromptInputSubmit
                 status={status}
                 onStop={stop}
                 disabled={!busy && !input.trim()}
-                className="absolute bottom-3 right-5 z-10 size-10 shrink-0 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
+                className="mr-2 size-10 shrink-0 self-center rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
               />
             </PromptInput>
           </div>
