@@ -1,0 +1,23 @@
+{
+  "name": "Hysto",
+  "short_name": "Hysto",
+  "description": "Chat com personagens de IA",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "orientation": "portrait-primary",
+  "background_color": "#120e0c",
+  "theme_color": "#120e0c",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "any",
+      "type": "image/x-icon",
+      "purpose": "any maskable"
+    }
+  ]
+}
