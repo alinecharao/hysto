@@ -6,9 +6,9 @@ import { CharacterForm } from "@/components/CharacterForm";
 export const Route = createFileRoute("/_authenticated/characters/new")({
   head: () => ({
     meta: [
-      { title: "Novo personagem — Persona" },
+      { title: "Novo personagem — Hysto" },
       { name: "description", content: "Crie um personagem de IA com personalidade própria." },
-      { property: "og:title", content: "Novo personagem — Persona" },
+      { property: "og:title", content: "Novo personagem — Hysto" },
       { property: "og:description", content: "Crie um personagem de IA com personalidade própria." },
     ],
   }),
