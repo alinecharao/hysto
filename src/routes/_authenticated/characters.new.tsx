@@ -26,7 +26,9 @@ function NewCharacter() {
         <h1 className="mb-8 mt-3 font-display text-4xl">Novo personagem</h1>
         <CharacterForm
           submitLabel="Criar"
+          userId={user.id}
           onSubmit={async (v) => {
+
             const { data, error } = await supabase
               .from("characters")
               .insert({ ...v, user_id: user.id })
