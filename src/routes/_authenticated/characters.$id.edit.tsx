@@ -22,6 +22,8 @@ function EditCharacter() {
   const { data } = useSuspenseQuery(characterQuery(id));
   const navigate = useNavigate();
   const qc = useQueryClient();
+  const { user } = Route.useRouteContext();
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto max-w-xl px-5 py-10">
