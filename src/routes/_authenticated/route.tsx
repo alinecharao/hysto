@@ -1,4 +1,4 @@
-import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -14,6 +14,7 @@ export const Route = createFileRoute("/_authenticated")({
 function Layout() {
   const { user } = Route.useRouteContext();
   const navigate = useNavigate();
+  const isChat = useRouterState({ select: (state) => state.location.pathname.startsWith("/chat/") });
   const { queryClient } = Route.useRouteContext();
   async function signOut() {
     await queryClient.cancelQueries();
@@ -23,7 +24,7 @@ function Layout() {
   }
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3">
+      <header className={`${isChat ? "hidden sm:flex" : "flex"} shrink-0 items-center justify-between border-b border-border px-5 py-3`}>
         <Link to="/characters" className="font-display text-xl italic text-primary">
           Persona
         </Link>

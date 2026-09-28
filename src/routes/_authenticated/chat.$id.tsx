@@ -2,9 +2,22 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { ChevronLeft, Ellipsis, Info, Pencil, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
+import lunaPortrait from "@/assets/luna-portrait.jpg";
+import rexPortrait from "@/assets/rex-portrait.jpg";
+import helenaPortrait from "@/assets/helena-portrait.jpg";
+import sherlockPortrait from "@/assets/sherlock-portrait.jpg";
 import {
   characterQuery,
   messagesQuery,
@@ -22,6 +35,8 @@ export const Route = createFileRoute("/_authenticated/chat/$id")({
       { name: "description", content: "Converse em texto com seu personagem de IA." },
       { property: "og:title", content: "Conversa — Persona" },
       { property: "og:description", content: "Converse em texto com seu personagem de IA." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   loader: async ({ context, params }) => {
@@ -33,6 +48,17 @@ export const Route = createFileRoute("/_authenticated/chat/$id")({
   component: ChatPage,
 });
 
+const presetPortraits: Record<string, string> = {
+  "Luna Corvo": lunaPortrait,
+  "Capitão Rex": rexPortrait,
+  "Dra. Helena": helenaPortrait,
+  Sherlock: sherlockPortrait,
+};
+
+function characterImage(character: Character) {
+  return character.image_url || presetPortraits[character.name] || "";
+}
+
 function ChatPage() {
   const { id } = Route.useParams();
   const { data: character } = useSuspenseQuery(characterQuery(id));
@@ -41,29 +67,12 @@ function ChatPage() {
 }
 
 function Avatar({ character, className }: { character: Character; className: string }) {
-  if (character.image_url) {
-    return (
-      <img
-        src={character.image_url}
-        alt={character.name}
-        className={`${className} shrink-0 overflow-hidden rounded-xl object-cover`}
-      />
-    );
-  }
-  return (
-    <span className={`${className} flex shrink-0 items-center justify-center rounded-xl bg-secondary`}>
-      {character.avatar}
-    </span>
-  );
+  const image = characterImage(character);
+  if (image) return <img src={image} alt={character.name} className={`${className} shrink-0 rounded-full object-cover`} />;
+  return <span className={`${className} flex shrink-0 items-center justify-center rounded-full bg-secondary`}>{character.avatar}</span>;
 }
 
-function ChatWindow({
-  character,
-  stored,
-}: {
-  character: Character;
-  stored: { id: string; role: string; content: string }[];
-}) {
+function ChatWindow({ character, stored }: { character: Character; stored: { id: string; role: string; content: string }[] }) {
   const { user } = Route.useRouteContext();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
@@ -71,267 +80,168 @@ function ChatWindow({
   const [openInfo, setOpenInfo] = useState(false);
   const thoughtsRef = useRef(showThoughts);
   thoughtsRef.current = showThoughts;
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-  const endRef = useRef<HTMLDivElement>(null);
+  const image = characterImage(character);
 
   const initial = useMemo<UIMessage[]>(
-    () =>
-      stored.map((m) => ({
-        id: m.id,
-        role: m.role as "user" | "assistant",
-        parts: [{ type: "text", text: m.content }],
-      })),
+    () => stored.map((m) => ({ id: m.id, role: m.role as "user" | "assistant", parts: [{ type: "text", text: m.content }] })),
     [stored],
   );
-
   const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/chat",
-        headers: async (): Promise<Record<string, string>> => {
-          const { data } = await supabase.auth.getSession();
-          return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
-        },
-        prepareSendMessagesRequest: ({ messages, headers }) => {
-          const last = messages[messages.length - 1];
-          const text = (last?.parts ?? []).map((p) => (p.type === "text" ? p.text : "")).join("");
-          return {
-            ...(headers ? { headers } : {}),
-            body: { characterId: character.id, text, thoughts: thoughtsRef.current },
-          };
-        },
-      }),
+    () => new DefaultChatTransport({
+      api: "/api/chat",
+      headers: async (): Promise<Record<string, string>> => {
+        const { data } = await supabase.auth.getSession();
+        return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+      },
+      prepareSendMessagesRequest: ({ messages, headers }) => {
+        const last = messages[messages.length - 1];
+        const text = (last?.parts ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
+        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current } };
+      },
+    }),
     [character.id],
   );
-
   const { messages, sendMessage, status, error, setMessages, stop } = useChat({
     id: character.id,
     messages: initial,
     transport,
     onFinish: () => qc.invalidateQueries({ queryKey: ["messages", character.id] }),
   });
-
   const busy = status === "submitted" || status === "streaming";
-
-  useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, status]);
-  useEffect(() => {
-    if (!busy) inputRef.current?.focus();
-  }, [busy]);
-
-  function send() {
-    const t = input.trim();
-    if (!t || busy) return;
-    setInput("");
-    sendMessage({ text: t });
-  }
 
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
-    const { error: delErr } = await supabase.from("messages").delete().eq("character_id", character.id);
-    if (delErr) return alert(delErr.message);
+    const { error: deleteError } = await supabase.from("messages").delete().eq("character_id", character.id);
+    if (deleteError) return alert(deleteError.message);
     setMessages([]);
     qc.invalidateQueries({ queryKey: ["messages", character.id] });
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="shrink-0 border-b border-border">
-        <div className="flex items-center gap-3 px-5 py-3">
-          <Link to="/characters" className="text-muted-foreground hover:text-foreground" aria-label="Voltar">
-            ←
-          </Link>
-          <Avatar character={character} className="size-11 text-2xl" />
-          <button
-            onClick={() => setOpenInfo((o) => !o)}
-            className="min-w-0 flex-1 text-left"
-            title="Ver descrição"
-          >
-            <div className="flex items-center gap-2">
-              <span className="font-display text-lg leading-tight">{character.name}</span>
-              {character.gender && (
-                <span className="text-xs text-muted-foreground">· {character.gender}</span>
-              )}
-              <span className="text-xs text-muted-foreground">{openInfo ? "▲" : "▼"}</span>
-            </div>
-            {character.tags?.length > 0 && (
-              <div className="mt-1 flex flex-wrap gap-1">
-                {character.tags.map((t) => (
-                  <span key={t} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide">
-                    {t}
-                  </span>
-                ))}
-              </div>
-            )}
-          </button>
-          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
-            <span>Pensamentos</span>
-            <input
-              type="checkbox"
-              checked={showThoughts}
-              onChange={(e) => setShowThoughts(e.target.checked)}
-              className="peer sr-only"
-            />
-            <span className="relative h-5 w-9 rounded-full bg-secondary transition peer-checked:bg-primary">
-              <span
-                className={`absolute top-0.5 size-4 rounded-full bg-background transition-all ${showThoughts ? "left-[1.125rem]" : "left-0.5"}`}
-              />
-            </span>
-          </label>
-          {character.user_id === user.id && (
-            <Link
-              to="/characters/$id/edit"
-              params={{ id: character.id }}
-              className="text-xs text-muted-foreground hover:text-foreground"
-            >
-              Editar
-            </Link>
-          )}
-          <button onClick={clearHistory} className="text-xs text-muted-foreground hover:text-destructive">
-            Limpar conversa
-          </button>
-        </div>
-        {openInfo && character.description && (
-          <p className="whitespace-pre-wrap border-t border-border bg-card px-5 py-4 text-sm text-foreground/80">
-            {character.description}
-          </p>
-        )}
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-3xl space-y-5 px-5 py-8">
-          {character.opening_scene && (
-            <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />
-          )}
-          {messages.map((m) => (
-            <Bubble
-              key={m.id}
-              role={m.role}
-              character={character}
-              showThoughts={showThoughts}
-              text={m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}
-            />
-          ))}
-          {status === "submitted" && (
-            <div className="flex items-center gap-3 text-muted-foreground">
-              <Avatar character={character} className="size-7 text-lg" />
-              <span className="flex gap-1">
-                <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
-                <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
-                <span className="size-2 animate-bounce rounded-full bg-primary" />
-              </span>
-            </div>
-          )}
-          {error && (
-            <p className="rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">
-              {error.message || "Não foi possível obter resposta."}
-            </p>
-          )}
-          <div ref={endRef} />
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t border-border px-5 py-4">
-        <div className="mx-auto max-w-3xl space-y-2">
-          <div className="flex flex-wrap gap-2">
-            {SCENE_COMMANDS.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                disabled={busy}
-                onClick={() => sendMessage({ text: commandMarker(c.id) })}
-                className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-foreground disabled:opacity-40"
-              >
-                {c.icon} {c.label}
-              </button>
-            ))}
+    <TooltipProvider>
+      <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        {image && (
+          <div className="pointer-events-none absolute inset-0 sm:hidden" aria-hidden="true">
+            <img src={image} alt="" className="size-full object-cover" />
+            <div className="absolute inset-0 bg-chat-overlay backdrop-blur-[2px]" />
           </div>
-          <form
-            className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 focus-within:border-primary"
-            onSubmit={(e) => {
-              e.preventDefault();
-              send();
-            }}
-          >
-            <textarea
-              ref={inputRef}
-              autoFocus
-              rows={1}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  send();
-                }
+        )}
+
+        <header className="relative z-20 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/50 bg-background/80 px-3 backdrop-blur-xl sm:h-auto sm:px-5 sm:py-3">
+          <Button asChild variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Voltar ao catálogo">
+            <Link to="/characters"><ChevronLeft /></Link>
+          </Button>
+          <button type="button" onClick={() => setOpenInfo(true)} className="flex min-w-0 items-center justify-center gap-2 text-left" aria-label={`Abrir cartão de ${character.name}`}>
+            <Avatar character={character} className="size-8 text-base" />
+            <span className="truncate font-sans text-sm font-semibold">{character.name}</span>
+          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Opções da conversa"><Ellipsis /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem onSelect={() => setOpenInfo(true)}><Info /> Ver personagem</DropdownMenuItem>
+              {character.user_id === user.id && (
+                <DropdownMenuItem asChild><Link to="/characters/$id/edit" params={{ id: character.id }}><Pencil /> Editar personagem</Link></DropdownMenuItem>
+              )}
+              <DropdownMenuItem onSelect={() => void clearHistory()} className="text-destructive"><Trash2 /> Limpar conversa</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </header>
+
+        <Conversation className="relative z-10 min-h-0">
+          <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-4 pb-8 pt-6 sm:px-5 sm:py-8">
+            {character.opening_scene && <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />}
+            {messages.map((message) => (
+              <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
+            ))}
+            {status === "submitted" && <Shimmer className="pl-2 text-sm">{character.name} está escrevendo...</Shimmer>}
+            {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error.message || "Não foi possível obter resposta."}</p>}
+          </ConversationContent>
+          <ConversationScrollButton />
+        </Conversation>
+
+        <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl sm:px-5 sm:py-4">
+          <div className="mx-auto max-w-3xl space-y-2">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {SCENE_COMMANDS.map((command) => (
+                <Button key={command.id} type="button" variant="outline" size="sm" disabled={busy} onClick={() => sendMessage({ text: commandMarker(command.id) })} className="shrink-0 rounded-full border-primary/35 bg-chat-glass text-xs">
+                  <span>{command.icon}</span>{command.label}
+                </Button>
+              ))}
+            </div>
+            <PromptInput
+              className="rounded-full border-border bg-chat-glass shadow-lg has-[>textarea]:flex-row"
+              onSubmit={(message) => {
+                const text = message.text.trim();
+                if (!text || busy) return;
+                setInput("");
+                sendMessage({ text });
               }}
-              placeholder={`Mensagem para ${character.name}...`}
-              className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
-            />
-            {busy ? (
-              <button type="button" onClick={stop} className="size-10 shrink-0 rounded-xl bg-secondary text-sm">
-                ■
-              </button>
-            ) : (
-              <button
-                disabled={!input.trim()}
-                className="size-10 shrink-0 rounded-xl bg-primary font-bold text-primary-foreground disabled:opacity-40"
-              >
-                ↑
-              </button>
-            )}
-          </form>
-        </div>
+            >
+              <PromptInputTextarea
+                autoFocus
+                rows={1}
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="Escreva sua mensagem..."
+                className="max-h-32 min-h-12 py-3.5 pl-4 text-base"
+              />
+              <PromptInputFooter className="w-auto shrink-0 px-2 py-2">
+                <PromptInputSubmit status={status} onStop={stop} disabled={!busy && !input.trim()} className="size-10 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90" />
+              </PromptInputFooter>
+            </PromptInput>
+          </div>
+        </footer>
+
+        <CharacterDialog character={character} open={openInfo} onOpenChange={setOpenInfo} showThoughts={showThoughts} onThoughtsChange={setShowThoughts} />
       </div>
-    </div>
+    </TooltipProvider>
   );
 }
 
-function Bubble({
-  role,
-  text,
-  character,
-  showThoughts,
-}: {
-  role: string;
-  text: string;
-  character: Character;
-  showThoughts: boolean;
-}) {
+function CharacterDialog({ character, open, onOpenChange, showThoughts, onThoughtsChange }: { character: Character; open: boolean; onOpenChange: (open: boolean) => void; showThoughts: boolean; onThoughtsChange: (value: boolean) => void }) {
+  const image = characterImage(character);
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto rounded-lg border-border bg-background p-0">
+        <div className="relative aspect-[4/3] overflow-hidden rounded-t-lg bg-secondary">
+          {image ? <img src={image} alt={character.name} className="size-full object-cover object-top" /> : <div className="flex size-full items-center justify-center text-7xl">{character.avatar}</div>}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
+        </div>
+        <div className="-mt-16 relative space-y-5 px-5 pb-6">
+          <div>
+            <DialogTitle className="font-display text-3xl leading-tight">{character.name}</DialogTitle>
+            <DialogDescription className="mt-2 text-sm leading-relaxed text-foreground/80">{character.description}</DialogDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {character.gender && <span className="rounded-full bg-secondary px-3 py-1 text-xs">{character.gender}</span>}
+            {character.tags.map((tag) => <span key={tag} className="rounded-full bg-secondary px-3 py-1 text-xs">{tag}</span>)}
+          </div>
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-md bg-secondary px-4 py-3">
+            <div className="min-w-0"><p className="text-sm font-medium">Pensamentos do personagem</p><p className="text-xs text-muted-foreground">Exibir emoções internas durante a história</p></div>
+            <Switch checked={showThoughts} onCheckedChange={onThoughtsChange} aria-label="Mostrar pensamentos" />
+          </div>
+          {character.background && <div className="border-t border-border pt-4"><h3 className="mb-2 text-sm font-semibold">Sobre</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.background}</p></div>}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Bubble({ role, text, character, showThoughts }: { role: string; text: string; character: Character; showThoughts: boolean }) {
   if (role === "user") {
-    const cmd = parseCommand(text);
-    if (cmd) {
-      return (
-        <div className="flex justify-center">
-          <span className="rounded-full border border-primary/40 bg-primary/10 px-4 py-1 text-xs text-primary">
-            {cmd.icon} {cmd.label}
-          </span>
-        </div>
-      );
-    }
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-          {text}
-        </div>
-      </div>
-    );
+    const command = parseCommand(text);
+    if (command) return <div className="flex justify-center"><span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">{command.icon} {command.label}</span></div>;
+    return <Message from="user"><MessageContent className="rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent></Message>;
   }
   const { thought, body } = splitThought(text);
   return (
-    <div className="flex gap-3">
-      <Avatar character={character} className="mt-0.5 size-8 text-lg" />
-      <div className="min-w-0 flex-1 space-y-2">
-        {thought && showThoughts && (
-          <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm italic text-primary/90">
-            💭 {thought}
-          </div>
-        )}
-        <div className="prose-chat text-[15px] leading-relaxed">
-          <ReactMarkdown>{body || (thought ? "" : text)}</ReactMarkdown>
-        </div>
-      </div>
-    </div>
+    <Message from="assistant" className="max-w-full">
+      <MessageContent className="w-full gap-3 rounded-3xl border border-border/30 bg-chat-panel px-5 py-5 shadow-xl backdrop-blur-md sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
+        {thought && showThoughts && <div className="border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground">{thought}</div>}
+        <MessageResponse className="prose-chat text-[17px] leading-[1.55] sm:text-[15px]">{body || (thought ? "" : text)}</MessageResponse>
+      </MessageContent>
+    </Message>
   );
 }
