@@ -102,10 +102,6 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     }
   }, []);
 
-  useEffect(() => {
-    if (error) setErrorHidden(false);
-  }, [error]);
-
   const changeAiProvider = (value: AiProvider) => {
     setAiProvider(value);
     window.localStorage.setItem("hysto-ai-provider", value);
@@ -137,6 +133,11 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     transport,
     onFinish: () => qc.invalidateQueries({ queryKey: ["messages", character.id] }),
   });
+
+  useEffect(() => {
+    if (error) setErrorHidden(false);
+  }, [error]);
+
   const busy = status === "submitted" || status === "streaming";
 
   async function clearHistory() {
