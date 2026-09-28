@@ -6,9 +6,9 @@ export const Route = createFileRoute("/")({
   },
   head: () => ({
     meta: [
-      { title: "Persona — Converse com personagens de IA" },
+      { title: "Hysto — Converse com personagens de IA" },
       { name: "description", content: "Chat em texto com personagens de IA de personalidades únicas. Crie os seus." },
-      { property: "og:title", content: "Persona — Converse com personagens de IA" },
+      { property: "og:title", content: "Hysto — Converse com personagens de IA" },
       { property: "og:description", content: "Chat em texto com personagens de IA de personalidades únicas. Crie os seus." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
