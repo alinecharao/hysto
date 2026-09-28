@@ -6,7 +6,7 @@ import { ChevronLeft, Ellipsis, Info, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import { PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
+import { PromptInput, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
@@ -171,7 +171,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
               ))}
             </div>
             <PromptInput
-              className="relative overflow-hidden rounded-full border-border bg-chat-glass shadow-lg"
+              className="relative rounded-3xl border-border bg-chat-glass shadow-lg"
               onSubmit={(message) => {
                 const text = message.text.trim();
                 if (!text || busy) return;
@@ -185,11 +185,14 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Escreva sua mensagem..."
-                className="max-h-32 min-h-12 py-3.5 pl-4 pr-14 text-base"
+                className="min-h-14 max-h-36 overflow-y-auto py-4 pl-4 pr-16 text-base leading-6"
               />
-              <PromptInputFooter className="absolute bottom-1 right-1 w-auto shrink-0 p-0">
-                <PromptInputSubmit status={status} onStop={stop} disabled={!busy && !input.trim()} className="size-10 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90" />
-              </PromptInputFooter>
+              <PromptInputSubmit
+                status={status}
+                onStop={stop}
+                disabled={!busy && !input.trim()}
+                className="absolute bottom-2 right-2 z-10 size-10 shrink-0 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
+              />
             </PromptInput>
           </div>
         </footer>
