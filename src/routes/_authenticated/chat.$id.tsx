@@ -49,13 +49,15 @@ export const Route = createFileRoute("/_authenticated/chat/$id")({
   component: ChatPage,
 });
 
-type AiProvider = "auto" | "gemini" | "groq" | "openrouter";
+type AiProvider = "auto" | "gemini" | "groq" | "openrouter" | "kimi" | "openai";
 
 const AI_PROVIDER_LABELS: Record<AiProvider, string> = {
   auto: "Automático",
   gemini: "Gemini",
   groq: "Groq",
   openrouter: "OpenRouter",
+  kimi: "Kimi",
+  openai: "OpenAI",
 };
 
 const presetPortraits: Record<string, string> = {
@@ -97,7 +99,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
 
   useEffect(() => {
     const saved = window.localStorage.getItem("hysto-ai-provider");
-    if (saved === "auto" || saved === "gemini" || saved === "groq" || saved === "openrouter") {
+    if (saved === "auto" || saved === "gemini" || saved === "groq" || saved === "openrouter" || saved === "kimi" || saved === "openai") {
       setAiProvider(saved);
     }
   }, []);
@@ -317,6 +319,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                   <SelectItem value="gemini">Gemini</SelectItem>
                   <SelectItem value="groq">Groq</SelectItem>
                   <SelectItem value="openrouter">OpenRouter</SelectItem>
+                  <SelectItem value="kimi">Kimi</SelectItem>
+                  <SelectItem value="openai">OpenAI</SelectItem>
                 </SelectContent>
               </Select>
               {SCENE_COMMANDS.map((command) => (
