@@ -171,7 +171,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
               ))}
             </div>
             <PromptInput
-              className="rounded-full border-border bg-chat-glass shadow-lg has-[>textarea]:flex-row"
+              className="relative overflow-hidden rounded-full border-border bg-chat-glass shadow-lg"
               onSubmit={(message) => {
                 const text = message.text.trim();
                 if (!text || busy) return;
@@ -185,9 +185,9 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Escreva sua mensagem..."
-                className="max-h-32 min-h-12 py-3.5 pl-4 text-base"
+                className="max-h-32 min-h-12 py-3.5 pl-4 pr-14 text-base"
               />
-              <PromptInputFooter className="w-auto shrink-0 px-2 py-2">
+              <PromptInputFooter className="absolute bottom-1 right-1 w-auto shrink-0 p-0">
                 <PromptInputSubmit status={status} onStop={stop} disabled={!busy && !input.trim()} className="size-10 rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90" />
               </PromptInputFooter>
             </PromptInput>
@@ -204,12 +204,12 @@ function CharacterDialog({ character, open, onOpenChange, showThoughts, onThough
   const image = characterImage(character);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="h-[min(90dvh,760px)] w-[calc(100%-1.5rem)] max-w-md overflow-y-auto rounded-lg border-border bg-background p-0">
-        <div className="relative aspect-[4/3] overflow-hidden rounded-t-lg bg-secondary">
+      <DialogContent className="max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-md gap-0 overflow-hidden rounded-lg border-border bg-background p-0">
+        <div className="relative aspect-[4/3] shrink-0 overflow-hidden bg-secondary">
           {image ? <img src={image} alt={character.name} className="size-full object-cover object-top" /> : <div className="flex size-full items-center justify-center text-7xl">{character.avatar}</div>}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
         </div>
-        <div className="-mt-16 relative space-y-5 px-5 pb-6">
+        <div className="space-y-5 overflow-y-auto px-5 pb-6 pt-1">
           <div>
             <DialogTitle className="font-display text-3xl leading-tight">{character.name}</DialogTitle>
             <DialogDescription className="mt-2 text-sm leading-relaxed text-foreground/80">{character.description}</DialogDescription>
