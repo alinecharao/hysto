@@ -258,13 +258,13 @@ export const Route = createFileRoute("/api/chat")({
                   ...requestBody,
                   messages: [
                     ...systemMessages.slice(0, 1),
-                    ...conversationMessages.slice(-8),
+                    ...conversationMessages.slice(-4),
                   ],
                   max_tokens: Math.min(
                     typeof originalBody.max_tokens === "number"
                       ? originalBody.max_tokens
-                      : 900,
-                    900,
+                      : 1400,
+                    1400,
                   ),
                 };
               }
@@ -303,7 +303,7 @@ export const Route = createFileRoute("/api/chat")({
           system: effectiveSystem,
           messages,
           abortSignal: request.signal,
-          maxOutputTokens: 1100,
+          maxOutputTokens: 1800,
           temperature: 0.9,
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
