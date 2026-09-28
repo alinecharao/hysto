@@ -237,7 +237,7 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
   }
   const segments = parseNarrativeSegments(text);
   return (
-    <Message from="assistant" className="max-w-full">
+    <Message from="assistant" className="mx-auto max-w-[calc(100%-1rem)] sm:max-w-[calc(100%-2rem)]">
       <MessageContent className="w-full gap-4 rounded-3xl border border-border/30 bg-chat-panel px-5 py-5 shadow-xl backdrop-blur-md sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
         {segments.map((segment, index) =>
           segment.type === "thought" ? (
