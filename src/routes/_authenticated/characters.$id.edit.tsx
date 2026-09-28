@@ -30,6 +30,8 @@ function EditCharacter() {
         <CharacterForm
           initial={data}
           submitLabel="Salvar"
+          userId={user.id}
+
           onSubmit={async (v) => {
             const { error } = await supabase.from("characters").update(v).eq("id", id);
             if (error) throw error;
