@@ -62,19 +62,32 @@ function Section({
         {items.map((c) => (
           <div
             key={c.id}
-            className="group relative rounded-2xl border border-border bg-card p-5 transition hover:border-primary/60"
+            className="group relative flex flex-col rounded-2xl border border-border bg-card p-5 transition hover:border-primary/60"
           >
             <Link to="/chat/$id" params={{ id: c.id }} className="absolute inset-0" aria-label={`Conversar com ${c.name}`} />
             <div className="flex items-start gap-4">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-secondary text-3xl">
-                {c.avatar}
-              </div>
+              {c.image_url ? (
+                <img src={c.image_url} alt={c.name} className="size-16 shrink-0 rounded-xl object-cover" />
+              ) : (
+                <div className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-secondary text-3xl">
+                  {c.avatar}
+                </div>
+              )}
               <div className="min-w-0">
                 <h3 className="font-display text-xl">{c.name}</h3>
-                <p className="text-sm text-muted-foreground">{c.tagline}</p>
+                {c.gender && <p className="text-xs text-muted-foreground">{c.gender}</p>}
+                {c.tags?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {c.tags.slice(0, 3).map((t) => (
+                      <span key={t} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
-            <p className="mt-4 line-clamp-2 text-sm text-foreground/80">{c.personality}</p>
+            <p className="mt-4 line-clamp-3 text-sm text-foreground/80">{c.description}</p>
             {editable && (
               <Link
                 to="/characters/$id/edit"
@@ -87,6 +100,7 @@ function Section({
           </div>
         ))}
       </div>
+
     </section>
   );
 }

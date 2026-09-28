@@ -5,7 +5,15 @@ import { DefaultChatTransport, type UIMessage } from "ai";
 import { useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { supabase } from "@/integrations/supabase/client";
-import { characterQuery, messagesQuery, type Character } from "@/lib/characters";
+import {
+  characterQuery,
+  messagesQuery,
+  parseCommand,
+  splitThought,
+  commandMarker,
+  SCENE_COMMANDS,
+  type Character,
+} from "@/lib/characters";
 
 export const Route = createFileRoute("/_authenticated/chat/$id")({
   head: () => ({
@@ -32,6 +40,23 @@ function ChatPage() {
   return <ChatWindow key={id} character={character} stored={stored} />;
 }
 
+function Avatar({ character, className }: { character: Character; className: string }) {
+  if (character.image_url) {
+    return (
+      <img
+        src={character.image_url}
+        alt={character.name}
+        className={`${className} shrink-0 overflow-hidden rounded-xl object-cover`}
+      />
+    );
+  }
+  return (
+    <span className={`${className} flex shrink-0 items-center justify-center rounded-xl bg-secondary`}>
+      {character.avatar}
+    </span>
+  );
+}
+
 function ChatWindow({
   character,
   stored,
@@ -42,6 +67,10 @@ function ChatWindow({
   const { user } = Route.useRouteContext();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
+  const [showThoughts, setShowThoughts] = useState(true);
+  const [openInfo, setOpenInfo] = useState(false);
+  const thoughtsRef = useRef(showThoughts);
+  thoughtsRef.current = showThoughts;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
 
@@ -66,7 +95,10 @@ function ChatWindow({
         prepareSendMessagesRequest: ({ messages, headers }) => {
           const last = messages[messages.length - 1];
           const text = (last?.parts ?? []).map((p) => (p.type === "text" ? p.text : "")).join("");
-          return { ...(headers ? { headers } : {}), body: { characterId: character.id, text } };
+          return {
+            ...(headers ? { headers } : {}),
+            body: { characterId: character.id, text, thoughts: thoughtsRef.current },
+          };
         },
       }),
     [character.id],
@@ -97,45 +129,93 @@ function ChatWindow({
 
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
-    const { error } = await supabase.from("messages").delete().eq("character_id", character.id);
-    if (error) return alert(error.message);
+    const { error: delErr } = await supabase.from("messages").delete().eq("character_id", character.id);
+    if (delErr) return alert(delErr.message);
     setMessages([]);
     qc.invalidateQueries({ queryKey: ["messages", character.id] });
   }
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex shrink-0 items-center gap-3 border-b border-border px-5 py-3">
-        <Link to="/characters" className="text-muted-foreground hover:text-foreground" aria-label="Voltar">←</Link>
-        <div className="flex size-10 items-center justify-center rounded-lg bg-secondary text-2xl">{character.avatar}</div>
-        <div className="min-w-0 flex-1">
-          <div className="font-display text-lg leading-tight">{character.name}</div>
-          <div className="truncate text-xs text-muted-foreground">{character.tagline}</div>
-        </div>
-        {character.user_id === user.id && (
-          <Link to="/characters/$id/edit" params={{ id: character.id }} className="text-xs text-muted-foreground hover:text-foreground">
-            Editar
+      <div className="shrink-0 border-b border-border">
+        <div className="flex items-center gap-3 px-5 py-3">
+          <Link to="/characters" className="text-muted-foreground hover:text-foreground" aria-label="Voltar">
+            ←
           </Link>
+          <Avatar character={character} className="size-11 text-2xl" />
+          <button
+            onClick={() => setOpenInfo((o) => !o)}
+            className="min-w-0 flex-1 text-left"
+            title="Ver descrição"
+          >
+            <div className="flex items-center gap-2">
+              <span className="font-display text-lg leading-tight">{character.name}</span>
+              {character.gender && (
+                <span className="text-xs text-muted-foreground">· {character.gender}</span>
+              )}
+              <span className="text-xs text-muted-foreground">{openInfo ? "▲" : "▼"}</span>
+            </div>
+            {character.tags?.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1">
+                {character.tags.map((t) => (
+                  <span key={t} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide">
+                    {t}
+                  </span>
+                ))}
+              </div>
+            )}
+          </button>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+            <span>Pensamentos</span>
+            <input
+              type="checkbox"
+              checked={showThoughts}
+              onChange={(e) => setShowThoughts(e.target.checked)}
+              className="peer sr-only"
+            />
+            <span className="relative h-5 w-9 rounded-full bg-secondary transition peer-checked:bg-primary">
+              <span
+                className={`absolute top-0.5 size-4 rounded-full bg-background transition-all ${showThoughts ? "left-[1.125rem]" : "left-0.5"}`}
+              />
+            </span>
+          </label>
+          {character.user_id === user.id && (
+            <Link
+              to="/characters/$id/edit"
+              params={{ id: character.id }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Editar
+            </Link>
+          )}
+          <button onClick={clearHistory} className="text-xs text-muted-foreground hover:text-destructive">
+            Limpar conversa
+          </button>
+        </div>
+        {openInfo && character.description && (
+          <p className="whitespace-pre-wrap border-t border-border bg-card px-5 py-4 text-sm text-foreground/80">
+            {character.description}
+          </p>
         )}
-        <button onClick={clearHistory} className="text-xs text-muted-foreground hover:text-destructive">
-          Limpar conversa
-        </button>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-3xl space-y-5 px-5 py-8">
-          {character.greeting && <Bubble role="assistant" text={character.greeting} avatar={character.avatar} />}
+          {character.opening_scene && (
+            <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />
+          )}
           {messages.map((m) => (
             <Bubble
               key={m.id}
               role={m.role}
-              avatar={character.avatar}
+              character={character}
+              showThoughts={showThoughts}
               text={m.parts.map((p) => (p.type === "text" ? p.text : "")).join("")}
             />
           ))}
           {status === "submitted" && (
             <div className="flex items-center gap-3 text-muted-foreground">
-              <span className="text-xl">{character.avatar}</span>
+              <Avatar character={character} className="size-7 text-lg" />
               <span className="flex gap-1">
                 <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.3s]" />
                 <span className="size-2 animate-bounce rounded-full bg-primary [animation-delay:-0.15s]" />
@@ -153,41 +233,83 @@ function ChatWindow({
       </div>
 
       <div className="shrink-0 border-t border-border px-5 py-4">
-        <form
-          className="mx-auto flex max-w-3xl items-end gap-2 rounded-2xl border border-input bg-card p-2 focus-within:border-primary"
-          onSubmit={(e) => {
-            e.preventDefault();
-            send();
-          }}
-        >
-          <textarea
-            ref={inputRef}
-            autoFocus
-            rows={1}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                send();
-              }
+        <div className="mx-auto max-w-3xl space-y-2">
+          <div className="flex flex-wrap gap-2">
+            {SCENE_COMMANDS.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                disabled={busy}
+                onClick={() => sendMessage({ text: commandMarker(c.id) })}
+                className="rounded-full border border-border px-3 py-1.5 text-xs text-muted-foreground transition hover:border-primary hover:text-foreground disabled:opacity-40"
+              >
+                {c.icon} {c.label}
+              </button>
+            ))}
+          </div>
+          <form
+            className="flex items-end gap-2 rounded-2xl border border-input bg-card p-2 focus-within:border-primary"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send();
             }}
-            placeholder={`Mensagem para ${character.name}...`}
-            className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
-          />
-          {busy ? (
-            <button type="button" onClick={stop} className="size-10 shrink-0 rounded-xl bg-secondary text-sm">■</button>
-          ) : (
-            <button disabled={!input.trim()} className="size-10 shrink-0 rounded-xl bg-primary font-bold text-primary-foreground disabled:opacity-40">↑</button>
-          )}
-        </form>
+          >
+            <textarea
+              ref={inputRef}
+              autoFocus
+              rows={1}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  send();
+                }
+              }}
+              placeholder={`Mensagem para ${character.name}...`}
+              className="max-h-40 min-h-10 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none"
+            />
+            {busy ? (
+              <button type="button" onClick={stop} className="size-10 shrink-0 rounded-xl bg-secondary text-sm">
+                ■
+              </button>
+            ) : (
+              <button
+                disabled={!input.trim()}
+                className="size-10 shrink-0 rounded-xl bg-primary font-bold text-primary-foreground disabled:opacity-40"
+              >
+                ↑
+              </button>
+            )}
+          </form>
+        </div>
       </div>
     </div>
   );
 }
 
-function Bubble({ role, text, avatar }: { role: string; text: string; avatar: string }) {
+function Bubble({
+  role,
+  text,
+  character,
+  showThoughts,
+}: {
+  role: string;
+  text: string;
+  character: Character;
+  showThoughts: boolean;
+}) {
   if (role === "user") {
+    const cmd = parseCommand(text);
+    if (cmd) {
+      return (
+        <div className="flex justify-center">
+          <span className="rounded-full border border-primary/40 bg-primary/10 px-4 py-1 text-xs text-primary">
+            {cmd.icon} {cmd.label}
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="flex justify-end">
         <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl rounded-br-sm bg-primary px-4 py-2.5 text-sm text-primary-foreground">
@@ -196,11 +318,19 @@ function Bubble({ role, text, avatar }: { role: string; text: string; avatar: st
       </div>
     );
   }
+  const { thought, body } = splitThought(text);
   return (
     <div className="flex gap-3">
-      <span className="mt-0.5 text-xl">{avatar}</span>
-      <div className="prose-chat min-w-0 flex-1 text-[15px] leading-relaxed">
-        <ReactMarkdown>{text}</ReactMarkdown>
+      <Avatar character={character} className="mt-0.5 size-8 text-lg" />
+      <div className="min-w-0 flex-1 space-y-2">
+        {thought && showThoughts && (
+          <div className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-2 text-sm italic text-primary/90">
+            💭 {thought}
+          </div>
+        )}
+        <div className="prose-chat text-[15px] leading-relaxed">
+          <ReactMarkdown>{body || (thought ? "" : text)}</ReactMarkdown>
+        </div>
       </div>
     </div>
   );
