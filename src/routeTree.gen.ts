@@ -14,6 +14,7 @@ import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
+import { Route as AuthenticatedCharactersIndexRouteImport } from './routes/_authenticated/characters.index'
 import { Route as AuthenticatedCharactersNewRouteImport } from './routes/_authenticated/characters.new'
 import { Route as AuthenticatedChatIdRouteImport } from './routes/_authenticated/chat.$id'
 import { Route as AuthenticatedCharactersIdEditRouteImport } from './routes/_authenticated/characters.$id.edit'
@@ -42,6 +43,12 @@ const ApiChatRoute = ApiChatRouteImport.update({
   path: '/api/chat',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedCharactersIndexRoute =
+  AuthenticatedCharactersIndexRouteImport.update({
+    id: '/characters/',
+    path: '/characters/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCharactersNewRoute =
   AuthenticatedCharactersNewRouteImport.update({
     id: '/characters/new',
@@ -67,6 +74,7 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/chat/$id': typeof AuthenticatedChatIdRoute
+  '/characters/': typeof AuthenticatedCharactersIndexRoute
   '/characters/$id/edit': typeof AuthenticatedCharactersIdEditRoute
 }
 export interface FileRoutesByTo {
@@ -76,6 +84,7 @@ export interface FileRoutesByTo {
   '/api/chat': typeof ApiChatRoute
   '/characters/new': typeof AuthenticatedCharactersNewRoute
   '/chat/$id': typeof AuthenticatedChatIdRoute
+  '/characters': typeof AuthenticatedCharactersIndexRoute
   '/characters/$id/edit': typeof AuthenticatedCharactersIdEditRoute
 }
 export interface FileRoutesById {
@@ -87,6 +96,7 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/_authenticated/characters/new': typeof AuthenticatedCharactersNewRoute
   '/_authenticated/chat/$id': typeof AuthenticatedChatIdRoute
+  '/_authenticated/characters/': typeof AuthenticatedCharactersIndexRoute
   '/_authenticated/characters/$id/edit': typeof AuthenticatedCharactersIdEditRoute
 }
 export interface FileRouteTypes {
@@ -98,6 +108,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/characters/new'
     | '/chat/$id'
+    | '/characters/'
     | '/characters/$id/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -107,6 +118,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/characters/new'
     | '/chat/$id'
+    | '/characters'
     | '/characters/$id/edit'
   id:
     | '__root__'
@@ -117,6 +129,7 @@ export interface FileRouteTypes {
     | '/api/chat'
     | '/_authenticated/characters/new'
     | '/_authenticated/chat/$id'
+    | '/_authenticated/characters/'
     | '/_authenticated/characters/$id/edit'
   fileRoutesById: FileRoutesById
 }
@@ -164,6 +177,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiChatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/characters/': {
+      id: '/_authenticated/characters/'
+      path: '/characters'
+      fullPath: '/characters/'
+      preLoaderRoute: typeof AuthenticatedCharactersIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/characters/new': {
       id: '/_authenticated/characters/new'
       path: '/characters/new'
@@ -192,6 +212,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDashboardRoute: typeof AuthenticatedDashboardRoute
   AuthenticatedCharactersNewRoute: typeof AuthenticatedCharactersNewRoute
   AuthenticatedChatIdRoute: typeof AuthenticatedChatIdRoute
+  AuthenticatedCharactersIndexRoute: typeof AuthenticatedCharactersIndexRoute
   AuthenticatedCharactersIdEditRoute: typeof AuthenticatedCharactersIdEditRoute
 }
 
@@ -199,6 +220,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDashboardRoute: AuthenticatedDashboardRoute,
   AuthenticatedCharactersNewRoute: AuthenticatedCharactersNewRoute,
   AuthenticatedChatIdRoute: AuthenticatedChatIdRoute,
+  AuthenticatedCharactersIndexRoute: AuthenticatedCharactersIndexRoute,
   AuthenticatedCharactersIdEditRoute: AuthenticatedCharactersIdEditRoute,
 }
 
