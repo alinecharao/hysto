@@ -17,35 +17,53 @@ export type Database = {
       characters: {
         Row: {
           avatar: string
+          background: string
           created_at: string
+          description: string
+          gender: string
           greeting: string
           id: string
+          image_url: string
           instructions: string
           name: string
+          opening_scene: string
           personality: string
           tagline: string
+          tags: string[]
           user_id: string | null
         }
         Insert: {
           avatar?: string
+          background?: string
           created_at?: string
+          description?: string
+          gender?: string
           greeting?: string
           id?: string
+          image_url?: string
           instructions?: string
           name: string
+          opening_scene?: string
           personality?: string
           tagline?: string
+          tags?: string[]
           user_id?: string | null
         }
         Update: {
           avatar?: string
+          background?: string
           created_at?: string
+          description?: string
+          gender?: string
           greeting?: string
           id?: string
+          image_url?: string
           instructions?: string
           name?: string
+          opening_scene?: string
           personality?: string
           tagline?: string
+          tags?: string[]
           user_id?: string | null
         }
         Relationships: []
