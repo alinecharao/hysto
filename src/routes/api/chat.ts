@@ -25,6 +25,31 @@ type ProviderConfig = {
 
 const RETRYABLE_PROVIDER_STATUS = new Set([401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504]);
 
+
+const PROVIDER_DAILY_LOCK_MS = 24 * 60 * 60 * 1000;
+const providerLocks = new Map<ConcreteProvider, number>();
+
+function getProviderLockRemaining(provider: ConcreteProvider) {
+  const until = providerLocks.get(provider);
+  if (!until) return 0;
+  const remaining = until - Date.now();
+  if (remaining <= 0) {
+    providerLocks.delete(provider);
+    return 0;
+  }
+  return remaining;
+}
+
+function looksLikeDailyQuotaError(status: number, body: string) {
+  if (status !== 429) return false;
+  return /daily|per day|requests per day|tokens per day|\brpd\b|\btpd\b|day quota|quota.{0,20}day/i.test(body);
+}
+
+function formatLockRemaining(ms: number) {
+  const hours = Math.max(1, Math.ceil(ms / (60 * 60 * 1000)));
+  return hours === 1 ? "1 hora" : `${hours} horas`;
+}
+
 function getProviderConfigs(request: Request): ProviderConfig[] {
   const origin = new URL(request.url).origin;
   const configs: Array<ProviderConfig | null> = [
@@ -207,15 +232,40 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
+        const unlockedProviders = configuredProviders.filter(
+          (provider) => getProviderLockRemaining(provider.id) === 0,
+        );
+
+        if (requestedProvider !== "auto") {
+          const selected = configuredProviders.find(
+            (provider) => provider.id === requestedProvider,
+          );
+
+          if (!selected) {
+            return json(
+              500,
+              `O provedor ${requestedProvider} não está configurado neste ambiente.`,
+            );
+          }
+
+          const lockRemaining = getProviderLockRemaining(selected.id);
+          if (lockRemaining > 0) {
+            return json(
+              429,
+              `${selected.label} está bloqueado temporariamente porque atingiu a cota diária. O Hysto libera esse provedor automaticamente em até ${formatLockRemaining(lockRemaining)}. Selecione Automático ou outro provedor.`,
+            );
+          }
+        }
+
         const orderedProviders =
           requestedProvider === "auto"
-            ? configuredProviders
-            : configuredProviders.filter((provider) => provider.id === requestedProvider);
+            ? unlockedProviders
+            : unlockedProviders.filter((provider) => provider.id === requestedProvider);
 
         if (orderedProviders.length === 0) {
           return json(
-            500,
-            `O provedor ${requestedProvider} não está configurado neste ambiente.`,
+            429,
+            "Todos os provedores configurados estão temporariamente bloqueados por limite diário. Tente novamente mais tarde.",
           );
         }
 
@@ -288,6 +338,22 @@ export const Route = createFileRoute("/api/chat")({
               if (response.ok) return response;
 
               lastResponse = response;
+
+              if (response.status === 429) {
+                const errorBody = await response.clone().text();
+
+                if (looksLikeDailyQuotaError(response.status, errorBody)) {
+                  providerLocks.set(
+                    provider.id,
+                    Date.now() + PROVIDER_DAILY_LOCK_MS,
+                  );
+
+                  // Daily quota is provider-wide for the configured key.
+                  // Stop trying alternate models from the same provider and
+                  // move directly to the next provider in automatic mode.
+                  break;
+                }
+              }
 
               if (!RETRYABLE_PROVIDER_STATUS.has(response.status)) {
                 return response;
