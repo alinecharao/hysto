@@ -47,7 +47,10 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
           label: "Groq",
           apiKey: process.env["GROQ_API_KEY"]!,
           baseURL: "https://api.groq.com/openai/v1",
-          models: [process.env["GROQ_MODEL"] || "openai/gpt-oss-20b"],
+          models: [
+            process.env["GROQ_MODEL"] || "qwen/qwen3.8-27b",
+            "openai/gpt-oss-20b",
+          ],
         }
       : null,
     process.env["OPENROUTER_API_KEY"]
@@ -254,19 +257,26 @@ export const Route = createFileRoute("/api/chat")({
                   (message) => message.role !== "system",
                 );
 
+                const groqMaxCompletionTokens = Math.min(
+                  typeof originalBody.max_tokens === "number"
+                    ? originalBody.max_tokens
+                    : 1600,
+                  1600,
+                );
+
                 requestBody = {
                   ...requestBody,
                   messages: [
                     ...systemMessages.slice(0, 1),
                     ...conversationMessages.slice(-4),
                   ],
-                  max_tokens: Math.min(
-                    typeof originalBody.max_tokens === "number"
-                      ? originalBody.max_tokens
-                      : 1400,
-                    1400,
-                  ),
+                  max_completion_tokens: groqMaxCompletionTokens,
+                  reasoning_effort: model.startsWith("openai/gpt-oss")
+                    ? "low"
+                    : "none",
                 };
+
+                delete requestBody.max_tokens;
               }
 
               const response = await fetch(`${provider.baseURL}/chat/completions`, {
