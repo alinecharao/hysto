@@ -10,15 +10,66 @@ const json = (status: number, error: string) =>
     headers: { "Content-Type": "application/json" },
   });
 
+
+type AiProvider = "auto" | "gemini" | "groq" | "openrouter";
+type ConcreteProvider = Exclude<AiProvider, "auto">;
+
+type ProviderConfig = {
+  id: ConcreteProvider;
+  label: string;
+  apiKey: string;
+  baseURL: string;
+  model: string;
+  headers?: Record<string, string>;
+};
+
+const RETRYABLE_PROVIDER_STATUS = new Set([402, 404, 408, 429, 500, 502, 503, 504]);
+
+function getProviderConfigs(request: Request): ProviderConfig[] {
+  const origin = new URL(request.url).origin;
+  const configs: Array<ProviderConfig | null> = [
+    process.env["GEMINI_API_KEY"]
+      ? {
+          id: "gemini",
+          label: "Gemini",
+          apiKey: process.env["GEMINI_API_KEY"]!,
+          baseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+          model: process.env["GEMINI_MODEL"] || "gemini-3.8-flash",
+        }
+      : null,
+    process.env["GROQ_API_KEY"]
+      ? {
+          id: "groq",
+          label: "Groq",
+          apiKey: process.env["GROQ_API_KEY"]!,
+          baseURL: "https://api.groq.com/openai/v1",
+          model: process.env["GROQ_MODEL"] || "openai/gpt-oss-20b",
+        }
+      : null,
+    process.env["OPENROUTER_API_KEY"]
+      ? {
+          id: "openrouter",
+          label: "OpenRouter",
+          apiKey: process.env["OPENROUTER_API_KEY"]!,
+          baseURL: "https://openrouter.ai/api/v1",
+          model: process.env["OPENROUTER_MODEL"] || "openrouter/free",
+          headers: {
+            "HTTP-Referer": origin,
+            "X-Title": "Hysto",
+          },
+        }
+      : null,
+  ];
+
+  return configs.filter((config): config is ProviderConfig => Boolean(config));
+}
+
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
         const url = process.env["SUPABASE_URL"]!;
         const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
-        const apiKey = process.env["GEMINI_API_KEY"];
-        if (!apiKey) return json(500, "Chave do Gemini não configurada.");
-
         const token = request.headers.get("authorization")?.replace("Bearer ", "");
         if (!token) return json(401, "Não autenticado.");
 
@@ -34,6 +85,7 @@ export const Route = createFileRoute("/api/chat")({
           characterId?: string;
           text?: string;
           thoughts?: boolean;
+          provider?: AiProvider;
         };
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
@@ -119,53 +171,79 @@ export const Route = createFileRoute("/api/chat")({
         ];
 
 
-        const geminiModels = [
-          "gemini-3.8-flash",
-          "gemini-3.6-flash",
-          "gemini-3.5-flash-lite",
-        ] as const;
+        const requestedProvider: AiProvider =
+          body.provider === "gemini" || body.provider === "groq" || body.provider === "openrouter"
+            ? body.provider
+            : "auto";
 
-        const fallbackFetch: typeof fetch = async (input, init) => {
+        const configuredProviders = getProviderConfigs(request);
+        if (configuredProviders.length === 0) {
+          return json(
+            500,
+            "Nenhum provedor de IA está configurado. Adicione GEMINI_API_KEY, GROQ_API_KEY ou OPENROUTER_API_KEY.",
+          );
+        }
+
+        const orderedProviders =
+          requestedProvider === "auto"
+            ? configuredProviders
+            : configuredProviders.filter((provider) => provider.id === requestedProvider);
+
+        if (orderedProviders.length === 0) {
+          return json(
+            500,
+            `O provedor ${requestedProvider} não está configurado neste ambiente.`,
+          );
+        }
+
+        const routerFetch: typeof fetch = async (input, init) => {
           const originalBody =
-            typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null;
+            typeof init?.body === "string"
+              ? (JSON.parse(init.body) as Record<string, unknown>)
+              : null;
 
-          if (!originalBody || typeof originalBody.model !== "string") {
-            return fetch(input, init);
-          }
-
-          const requestedModel = originalBody.model;
-          const orderedModels = [
-            requestedModel,
-            ...geminiModels.filter((model) => model !== requestedModel),
-          ];
+          if (!originalBody) return fetch(input, init);
 
           let lastResponse: Response | null = null;
 
-          for (const model of orderedModels) {
-            const response = await fetch(input, {
+          for (const provider of orderedProviders) {
+            const headers = new Headers(init?.headers);
+            headers.set("Authorization", `Bearer ${provider.apiKey}`);
+            headers.set("Content-Type", "application/json");
+
+            for (const [name, value] of Object.entries(provider.headers ?? {})) {
+              headers.set(name, value);
+            }
+
+            const response = await fetch(`${provider.baseURL}/chat/completions`, {
               ...init,
-              body: JSON.stringify({ ...originalBody, model }),
+              headers,
+              body: JSON.stringify({ ...originalBody, model: provider.model }),
             });
 
             if (response.ok) return response;
 
             lastResponse = response;
-            if (![404, 429, 500, 502, 503, 504].includes(response.status)) {
+
+            if (
+              requestedProvider !== "auto" ||
+              !RETRYABLE_PROVIDER_STATUS.has(response.status)
+            ) {
               return response;
             }
           }
 
-          return lastResponse ?? fetch(input, init);
+          return lastResponse ?? new Response("Nenhum provedor disponível.", { status: 503 });
         };
 
         const provider = createOpenAI({
-          baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
-          apiKey,
-          fetch: fallbackFetch,
+          baseURL: "https://hysto.local/v1",
+          apiKey: "hysto-router",
+          fetch: routerFetch,
         });
 
         const result = streamText({
-          model: provider.chat(geminiModels[0]),
+          model: provider.chat("hysto-router"),
           system,
           messages,
           abortSignal: request.signal,
