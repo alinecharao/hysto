@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { ChevronLeft, Ellipsis, Info, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, Ellipsis, Info, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
@@ -89,6 +89,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   const [showThoughts, setShowThoughts] = useState(true);
   const [openInfo, setOpenInfo] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("auto");
+  const [errorHidden, setErrorHidden] = useState(false);
   const thoughtsRef = useRef(showThoughts);
   const aiProviderRef = useRef<AiProvider>(aiProvider);
   thoughtsRef.current = showThoughts;
@@ -100,6 +101,10 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
       setAiProvider(saved);
     }
   }, []);
+
+  useEffect(() => {
+    if (error) setErrorHidden(false);
+  }, [error]);
 
   const changeAiProvider = (value: AiProvider) => {
     setAiProvider(value);
@@ -142,6 +147,90 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     qc.invalidateQueries({ queryKey: ["messages", character.id] });
   }
 
+
+  function messageText(message: UIMessage) {
+    return (message.parts ?? [])
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("");
+  }
+
+  function lastUserMessage() {
+    return [...messages].reverse().find((message) => message.role === "user") ?? null;
+  }
+
+  async function removeLatestPersistedUserMessage(text: string) {
+    const { data, error: findError } = await supabase
+      .from("messages")
+      .select("id")
+      .eq("character_id", character.id)
+      .eq("role", "user")
+      .eq("content", text)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (findError) throw findError;
+    if (!data?.id) return;
+
+    const { error: deleteError } = await supabase
+      .from("messages")
+      .delete()
+      .eq("id", data.id);
+
+    if (deleteError) throw deleteError;
+  }
+
+  function removeLastLocalUserMessage() {
+    let removed = false;
+    const next = [...messages]
+      .reverse()
+      .filter((message) => {
+        if (!removed && message.role === "user") {
+          removed = true;
+          return false;
+        }
+        return true;
+      })
+      .reverse();
+
+    setMessages(next);
+  }
+
+  async function deleteFailedMessage() {
+    const message = lastUserMessage();
+    if (!message) {
+      setErrorHidden(true);
+      return;
+    }
+
+    try {
+      const text = messageText(message);
+      await removeLatestPersistedUserMessage(text);
+      removeLastLocalUserMessage();
+      setErrorHidden(true);
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a mensagem.");
+    }
+  }
+
+  async function retryFailedMessage() {
+    const message = lastUserMessage();
+    if (!message || busy) return;
+
+    const text = messageText(message).trim();
+    if (!text) return;
+
+    try {
+      await removeLatestPersistedUserMessage(text);
+      removeLastLocalUserMessage();
+      setErrorHidden(true);
+      await sendMessage({ text });
+    } catch (retryError) {
+      alert(retryError instanceof Error ? retryError.message : "Não foi possível reenviar a mensagem.");
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -181,7 +270,35 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
               <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
             ))}
             {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
-            {error && <p className="rounded-md border border-destructive/40 bg-destructive/10 px-4 py-2 text-sm text-destructive">{error.message || "Não foi possível obter resposta."}</p>}
+            {error && !errorHidden && (
+              <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+                <p>{error.message || "Não foi possível obter resposta."}</p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void retryFailedMessage()}
+                    className="h-8 rounded-full border-destructive/30 bg-background/60 text-xs text-foreground"
+                  >
+                    <RotateCcw className="size-3.5" />
+                    Tentar novamente
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void deleteFailedMessage()}
+                    className="h-8 rounded-full text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="size-3.5" />
+                    Apagar mensagem
+                  </Button>
+                </div>
+              </div>
+            )}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
