@@ -95,7 +95,7 @@ export const Route = createFileRoute("/api/chat")({
           .join("\n\n");
 
         const full = history ?? [];
-        const WINDOW = 24;
+        const WINDOW = 16;
         const recent = full.slice(-WINDOW);
         const trimmed = full.length > WINDOW;
 
@@ -125,11 +125,11 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         const result = streamText({
-          model: provider.chat("gemini-3.6-flash"),
+          model: provider.chat("gemini-3.8-flash"),
           system,
           messages,
           abortSignal: request.signal,
-          maxOutputTokens: 1400,
+          maxOutputTokens: 1100,
           temperature: 0.9,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
