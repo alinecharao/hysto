@@ -119,18 +119,59 @@ export const Route = createFileRoute("/api/chat")({
         ];
 
 
+        const geminiModels = [
+          "gemini-3.8-flash",
+          "gemini-3.6-flash",
+          "gemini-3.5-flash-lite",
+        ] as const;
+
+        const fallbackFetch: typeof fetch = async (input, init) => {
+          const originalBody =
+            typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : null;
+
+          if (!originalBody || typeof originalBody.model !== "string") {
+            return fetch(input, init);
+          }
+
+          const requestedModel = originalBody.model;
+          const orderedModels = [
+            requestedModel,
+            ...geminiModels.filter((model) => model !== requestedModel),
+          ];
+
+          let lastResponse: Response | null = null;
+
+          for (const model of orderedModels) {
+            const response = await fetch(input, {
+              ...init,
+              body: JSON.stringify({ ...originalBody, model }),
+            });
+
+            if (response.ok) return response;
+
+            lastResponse = response;
+            if (![404, 429, 500, 502, 503, 504].includes(response.status)) {
+              return response;
+            }
+          }
+
+          return lastResponse ?? fetch(input, init);
+        };
+
         const provider = createOpenAI({
           baseURL: "https://generativelanguage.googleapis.com/v1beta/openai/",
           apiKey,
+          fetch: fallbackFetch,
         });
 
         const result = streamText({
-          model: provider.chat("gemini-3.8-flash"),
+          model: provider.chat(geminiModels[0]),
           system,
           messages,
           abortSignal: request.signal,
           maxOutputTokens: 1100,
           temperature: 0.9,
+          maxRetries: 0,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
             const { error } = await supabase.from("messages").insert({
