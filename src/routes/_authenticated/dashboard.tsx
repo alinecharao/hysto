@@ -5,9 +5,9 @@ import { charactersQuery, type Character } from "@/lib/characters";
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Histórias — Persona" },
+      { title: "Histórias — Hysto" },
       { name: "description", content: "Acesse todas as suas histórias e personagens de IA." },
-      { property: "og:title", content: "Histórias — Persona" },
+      { property: "og:title", content: "Histórias — Hysto" },
       { property: "og:description", content: "Acesse todas as suas histórias e personagens de IA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
