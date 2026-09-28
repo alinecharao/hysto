@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { charactersQuery, type Character } from "@/lib/characters";
 
-export const Route = createFileRoute("/_authenticated/characters/")({
+export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
       { title: "Personagens — Persona" },
