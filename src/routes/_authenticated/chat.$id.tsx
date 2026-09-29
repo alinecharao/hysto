@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { ChevronLeft, Ellipsis, Info, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, ChevronLeft, Ellipsis, Info, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
@@ -366,25 +366,30 @@ function CharacterDialog({ character, open, onOpenChange, showThoughts, onThough
   const image = characterImage(character);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90dvh] w-[calc(100%-1.5rem)] max-w-md gap-0 overflow-hidden rounded-lg border-border bg-background p-0">
-        <div className="relative aspect-[4/3] shrink-0 overflow-hidden bg-secondary">
-          {image ? <img src={image} alt={character.name} className="size-full object-cover object-top" /> : <div className="flex size-full items-center justify-center text-7xl">{character.avatar}</div>}
-          <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-        </div>
-        <div className="space-y-5 overflow-y-auto px-5 pb-6 pt-1">
-          <div>
-            <DialogTitle className="font-display text-3xl leading-tight">{character.name}</DialogTitle>
-            <DialogDescription className="mt-2 text-sm leading-relaxed text-foreground/80">{character.description}</DialogDescription>
+      <DialogContent className="h-[100dvh] w-full max-w-md gap-0 overflow-hidden rounded-none border-0 bg-background p-0 sm:h-[90dvh] sm:rounded-lg sm:border">
+        <div className="relative min-h-[48dvh] shrink-0 overflow-hidden bg-secondary sm:min-h-[24rem]">
+          {image ? <img src={image} alt={character.name} className="size-full object-cover object-top" /> : <div className="flex size-full items-center justify-center text-8xl">{character.avatar}</div>}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/5 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-5">
+            <DialogTitle className="max-w-[90%] text-3xl font-bold leading-tight sm:text-4xl">{character.name}</DialogTitle>
+            <DialogDescription className="mt-2 line-clamp-3 text-sm leading-relaxed text-foreground/85">{character.description}</DialogDescription>
           </div>
+        </div>
+        <div className="space-y-5 overflow-y-auto px-5 pb-28 pt-2">
           <div className="flex flex-wrap gap-2">
             {character.gender && <span className="rounded-full bg-secondary px-3 py-1 text-xs">{character.gender}</span>}
-            {character.tags.map((tag) => <span key={tag} className="rounded-full bg-secondary px-3 py-1 text-xs">{tag}</span>)}
+            {character.tags.map((tag) => <span key={tag} className="rounded-full bg-secondary px-3 py-1.5 text-xs">{tag}</span>)}
           </div>
-          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 rounded-md bg-secondary px-4 py-3">
-            <div className="min-w-0"><p className="text-sm font-medium">Pensamentos do personagem</p><p className="text-xs text-muted-foreground">Exibir emoções internas durante a história</p></div>
+          <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-secondary px-4 py-3">
+            <Brain className="size-5 shrink-0 text-primary" />
+            <div className="min-w-0"><p className="truncate text-sm font-medium">Pensamentos do personagem</p><p className="text-xs text-muted-foreground">Mostrar emoções internas</p></div>
             <Switch checked={showThoughts} onCheckedChange={onThoughtsChange} aria-label="Mostrar pensamentos" />
           </div>
-          {character.background && <div className="border-t border-border pt-4"><h3 className="mb-2 text-sm font-semibold">Sobre</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.background}</p></div>}
+          {character.opening_scene && <div className="border-t border-border pt-4"><h3 className="mb-2 text-base font-semibold">Cena de abertura</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.opening_scene}</p></div>}
+          {character.background && <div className="border-t border-border pt-4"><h3 className="mb-2 text-base font-semibold">Sobre</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.background}</p></div>}
+        </div>
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-8">
+          <Button type="button" size="lg" className="h-12 w-full rounded-full font-semibold" onClick={() => onOpenChange(false)}>Continuar história</Button>
         </div>
       </DialogContent>
     </Dialog>

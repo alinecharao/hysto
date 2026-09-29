@@ -1,5 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
+import { Compass, Plus, Search, Sparkles } from "lucide-react";
+import { useMemo, useState } from "react";
+import lunaPortrait from "@/assets/luna-portrait.jpg";
+import rexPortrait from "@/assets/rex-portrait.jpg";
+import helenaPortrait from "@/assets/helena-portrait.jpg";
+import sherlockPortrait from "@/assets/sherlock-portrait.jpg";
+import { Button } from "@/components/ui/button";
 import { charactersQuery, type Character } from "@/lib/characters";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -22,87 +29,108 @@ function Catalog() {
   const { user } = Route.useRouteContext();
   const mine = data.filter((c) => c.user_id === user.id);
   const presets = data.filter((c) => !c.user_id);
+  const [activeTab, setActiveTab] = useState<"all" | "mine" | "recent">("all");
+  const visible = useMemo(() => {
+    if (activeTab === "mine") return mine;
+    if (activeTab === "recent") return data.slice(0, 6);
+    return [...mine, ...presets];
+  }, [activeTab, data, mine, presets]);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-5xl px-5 py-10">
-        <div className="mb-10 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="font-display text-4xl md:text-5xl">Todas as histórias</h1>
-            <p className="mt-2 text-muted-foreground">Escolha uma história para continuar ou crie um personagem.</p>
+    <div className="h-full overflow-y-auto bg-background">
+      <div className="mx-auto max-w-6xl px-3 pb-10 pt-5 sm:px-6 sm:pt-8">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 px-1">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase text-primary">Descubra sua próxima história</p>
+            <h1 className="truncate font-display text-3xl sm:text-4xl">Personagens</h1>
           </div>
-          <Link
-            to="/characters/new"
-            className="rounded-full bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
-          >
-            + Criar personagem
-          </Link>
+          <div className="flex shrink-0 items-center gap-1">
+            <Button variant="ghost" size="icon" className="rounded-full" aria-label="Buscar personagens">
+              <Search />
+            </Button>
+            <Button asChild size="icon" className="rounded-full" aria-label="Criar personagem">
+              <Link to="/characters/new"><Plus /></Link>
+            </Button>
+          </div>
         </div>
 
-        {mine.length > 0 && <Section title="Seus personagens" items={mine} editable />}
-        <Section title="Catálogo" items={presets} />
+        {mine.length > 0 && (
+          <section className="mt-7">
+            <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-1">
+              <h2 className="truncate text-sm font-semibold">Continue sua história</h2>
+              <span className="text-xs text-muted-foreground">Seus personagens</span>
+            </div>
+            <Link
+              to="/chat/$id"
+              params={{ id: mine[0].id }}
+              className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-lg border border-border bg-card p-2 transition-colors hover:border-primary/60"
+            >
+              <CharacterImage character={mine[0]} className="aspect-square size-[5.5rem] rounded-md" />
+              <div className="min-w-0">
+                <h3 className="truncate font-semibold">{mine[0].name}</h3>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{mine[0].opening_scene || mine[0].description}</p>
+              </div>
+              <span className="pr-2 text-xl text-primary" aria-hidden="true">→</span>
+            </Link>
+          </section>
+        )}
+
+        <nav className="mt-8 flex gap-6 overflow-x-auto border-b border-border px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" aria-label="Filtros do catálogo">
+          <Tab active={activeTab === "all"} onClick={() => setActiveTab("all")}>Para você</Tab>
+          <Tab active={activeTab === "mine"} onClick={() => setActiveTab("mine")}>Seus personagens</Tab>
+          <Tab active={activeTab === "recent"} onClick={() => setActiveTab("recent")}>Mais recentes</Tab>
+        </nav>
+
+        {visible.length > 0 ? (
+          <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4">
+            {visible.map((character) => <CharacterCard key={character.id} character={character} editable={character.user_id === user.id} />)}
+          </div>
+        ) : (
+          <div className="grid min-h-64 place-items-center text-center">
+            <div><Compass className="mx-auto mb-3 size-7 text-primary" /><p className="text-sm text-muted-foreground">Você ainda não criou personagens.</p></div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function Section({
-  title,
-  items,
-  editable,
-}: {
-  title: string;
-  items: Character[];
-  editable?: boolean;
-}) {
-  return (
-    <section className="mb-12">
-      <h2 className="mb-4 text-xs font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-        {title}
-      </h2>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {items.map((c) => (
-          <div
-            key={c.id}
-            className="group relative flex flex-col rounded-2xl border border-border bg-card p-5 transition hover:border-primary/60"
-          >
-            <Link to="/chat/$id" params={{ id: c.id }} className="absolute inset-0" aria-label={`Conversar com ${c.name}`} />
-            <div className="flex items-start gap-4">
-              {c.image_url ? (
-                <img src={c.image_url} alt={c.name} className="size-16 shrink-0 rounded-xl object-cover" />
-              ) : (
-                <div className="flex size-16 shrink-0 items-center justify-center rounded-xl bg-secondary text-3xl">
-                  {c.avatar}
-                </div>
-              )}
-              <div className="min-w-0">
-                <h3 className="font-display text-xl">{c.name}</h3>
-                {c.gender && <p className="text-xs text-muted-foreground">{c.gender}</p>}
-                {c.tags?.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1">
-                    {c.tags.slice(0, 3).map((t) => (
-                      <span key={t} className="rounded-full bg-secondary px-2 py-0.5 text-[10px] uppercase tracking-wide">
-                        {t}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-            <p className="mt-4 line-clamp-3 text-sm text-foreground/80">{c.description}</p>
-            {editable && (
-              <Link
-                to="/characters/$id/edit"
-                params={{ id: c.id }}
-                className="relative mt-4 inline-block text-xs text-primary hover:underline"
-              >
-                Editar
-              </Link>
-            )}
-          </div>
-        ))}
-      </div>
+const presetPortraits: Record<string, string> = {
+  "Luna Corvo": lunaPortrait,
+  "Capitão Rex": rexPortrait,
+  "Dra. Helena": helenaPortrait,
+  Sherlock: sherlockPortrait,
+};
 
-    </section>
+function CharacterImage({ character, className }: { character: Character; className: string }) {
+  const image = character.image_url || presetPortraits[character.name];
+  if (image) return <img src={image} alt={character.name} className={`${className} object-cover object-top`} />;
+  return <div className={`${className} grid place-items-center bg-secondary text-5xl`}>{character.avatar}</div>;
+}
+
+function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
+  return (
+    <Button type="button" variant="ghost" onClick={onClick} className={`relative h-11 shrink-0 rounded-none px-0 text-sm ${active ? "text-foreground" : "text-muted-foreground"}`}>
+      {children}
+      {active && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-primary" />}
+    </Button>
+  );
+}
+
+function CharacterCard({ character, editable }: { character: Character; editable: boolean }) {
+  return (
+    <article className="group relative aspect-[3/4] min-w-0 overflow-hidden rounded-md bg-card">
+      <CharacterImage character={character} className="absolute inset-0 size-full transition duration-500 group-hover:scale-105" />
+      <div className="absolute inset-0 bg-gradient-to-t from-background via-background/15 to-transparent" />
+      <Link to="/chat/$id" params={{ id: character.id }} className="absolute inset-0" aria-label={`Abrir ${character.name}`} />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 p-3 sm:p-4">
+        <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase text-primary">
+          <Sparkles className="size-3" /> {character.tags[0] || character.gender || "História"}
+        </div>
+        <h2 className="truncate text-base font-bold sm:text-lg">{character.name}</h2>
+        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-foreground/75 sm:text-sm">{character.description}</p>
+        {editable && <span className="mt-2 inline-block text-[10px] font-semibold uppercase text-primary">Criado por você</span>}
+      </div>
+    </article>
   );
 }

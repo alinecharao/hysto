@@ -1,4 +1,5 @@
 import { createFileRoute, Link, Outlet, redirect, useNavigate, useRouterState } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_authenticated")({
@@ -30,9 +31,9 @@ function Layout() {
         </Link>
         <div className="flex items-center gap-4 text-sm">
           <span className="hidden text-muted-foreground sm:inline">{user.email}</span>
-          <button onClick={signOut} className="text-muted-foreground hover:text-foreground">
+          <Button type="button" variant="ghost" size="sm" onClick={signOut} className="text-muted-foreground">
             Sair
-          </button>
+          </Button>
         </div>
       </header>
       <div className="min-h-0 flex-1">
