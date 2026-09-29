@@ -26,18 +26,31 @@ type ProviderConfig = {
 const RETRYABLE_PROVIDER_STATUS = new Set([401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504]);
 
 
-const PROVIDER_DAILY_LOCK_MS = 24 * 60 * 60 * 1000;
-const providerLocks = new Map<ConcreteProvider, number>();
+const MODEL_DAILY_LOCK_MS = 24 * 60 * 60 * 1000;
+const modelLocks = new Map<string, number>();
 
-function getProviderLockRemaining(provider: ConcreteProvider) {
-  const until = providerLocks.get(provider);
+function modelLockKey(provider: ConcreteProvider, model: string) {
+  return `${provider}:${model}`;
+}
+
+function getModelLockRemaining(provider: ConcreteProvider, model: string) {
+  const key = modelLockKey(provider, model);
+  const until = modelLocks.get(key);
   if (!until) return 0;
+
   const remaining = until - Date.now();
   if (remaining <= 0) {
-    providerLocks.delete(provider);
+    modelLocks.delete(key);
     return 0;
   }
+
   return remaining;
+}
+
+function getProviderAvailableModels(provider: ProviderConfig) {
+  return provider.models.filter(
+    (model) => getModelLockRemaining(provider.id, model) === 0,
+  );
 }
 
 function looksLikeDailyQuotaError(status: number, body: string) {
@@ -232,8 +245,8 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
-        const unlockedProviders = configuredProviders.filter(
-          (provider) => getProviderLockRemaining(provider.id) === 0,
+        const providersWithAvailableModels = configuredProviders.filter(
+          (provider) => getProviderAvailableModels(provider).length > 0,
         );
 
         if (requestedProvider !== "auto") {
@@ -248,24 +261,32 @@ export const Route = createFileRoute("/api/chat")({
             );
           }
 
-          const lockRemaining = getProviderLockRemaining(selected.id);
-          if (lockRemaining > 0) {
+          const availableModels = getProviderAvailableModels(selected);
+          if (availableModels.length === 0) {
+            const remaining = Math.min(
+              ...selected.models
+                .map((model) => getModelLockRemaining(selected.id, model))
+                .filter((value) => value > 0),
+            );
+
             return json(
               429,
-              `${selected.label} está bloqueado temporariamente porque atingiu a cota diária. O Hysto libera esse provedor automaticamente em até ${formatLockRemaining(lockRemaining)}. Selecione Automático ou outro provedor.`,
+              `${selected.label} está temporariamente sem modelos disponíveis por cota diária. O Hysto tenta liberar os modelos automaticamente em até ${formatLockRemaining(remaining)}. Selecione Automático ou outro provedor.`,
             );
           }
         }
 
         const orderedProviders =
           requestedProvider === "auto"
-            ? unlockedProviders
-            : unlockedProviders.filter((provider) => provider.id === requestedProvider);
+            ? providersWithAvailableModels
+            : providersWithAvailableModels.filter(
+                (provider) => provider.id === requestedProvider,
+              );
 
         if (orderedProviders.length === 0) {
           return json(
             429,
-            "Todos os provedores configurados estão temporariamente bloqueados por limite diário. Tente novamente mais tarde.",
+            "Todos os modelos configurados estão temporariamente bloqueados por limite diário. Tente novamente mais tarde.",
           );
         }
 
@@ -289,6 +310,8 @@ export const Route = createFileRoute("/api/chat")({
             }
 
             for (const model of provider.models) {
+              if (getModelLockRemaining(provider.id, model) > 0) continue;
+
               let requestBody: Record<string, unknown> = { ...originalBody, model };
 
               // Groq's free/on-demand TPM is relatively small. Keep the
@@ -343,15 +366,15 @@ export const Route = createFileRoute("/api/chat")({
                 const errorBody = await response.clone().text();
 
                 if (looksLikeDailyQuotaError(response.status, errorBody)) {
-                  providerLocks.set(
-                    provider.id,
-                    Date.now() + PROVIDER_DAILY_LOCK_MS,
+                  modelLocks.set(
+                    modelLockKey(provider.id, model),
+                    Date.now() + MODEL_DAILY_LOCK_MS,
                   );
 
-                  // Daily quota is provider-wide for the configured key.
-                  // Stop trying alternate models from the same provider and
-                  // move directly to the next provider in automatic mode.
-                  break;
+                  // Daily quota can be model-specific. Lock only the model
+                  // that exhausted its daily allowance and immediately try
+                  // the next model from the same provider.
+                  continue;
                 }
               }
 
