@@ -30,11 +30,15 @@ function Catalog() {
   const mine = data.filter((c) => c.user_id === user.id);
   const presets = data.filter((c) => !c.user_id);
   const [activeTab, setActiveTab] = useState<"all" | "mine" | "recent">("all");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const featured = mine[0];
   const visible = useMemo(() => {
-    if (activeTab === "mine") return mine;
-    if (activeTab === "recent") return data.slice(0, 6);
-    return [...mine, ...presets];
-  }, [activeTab, data, mine, presets]);
+    const selected = activeTab === "mine" ? mine : activeTab === "recent" ? data.slice(0, 6) : [...mine, ...presets];
+    const query = search.trim().toLocaleLowerCase("pt-BR");
+    if (!query) return selected;
+    return selected.filter((character) => [character.name, character.description, character.gender, ...character.tags].join(" ").toLocaleLowerCase("pt-BR").includes(query));
+  }, [activeTab, data, mine, presets, search]);
 
   return (
     <div className="h-full overflow-y-auto bg-background">
@@ -45,7 +49,7 @@ function Catalog() {
             <h1 className="truncate font-display text-3xl sm:text-4xl">Personagens</h1>
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            <Button variant="ghost" size="icon" className="rounded-full" aria-label="Buscar personagens">
+            <Button type="button" variant="ghost" size="icon" className="rounded-full" aria-label="Buscar personagens" aria-expanded={searchOpen} onClick={() => setSearchOpen((open) => !open)}>
               <Search />
             </Button>
             <Button asChild size="icon" className="rounded-full" aria-label="Criar personagem">
@@ -54,7 +58,17 @@ function Catalog() {
           </div>
         </div>
 
-        {mine.length > 0 && (
+        {searchOpen && (
+          <div className="mt-4 px-1">
+            <label className="relative block">
+              <span className="sr-only">Buscar por nome, gênero ou tema</span>
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input autoFocus value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Buscar personagens" className="h-11 w-full rounded-md border border-input bg-card pl-10 pr-4 text-sm outline-none transition focus:border-primary focus:ring-1 focus:ring-primary" />
+            </label>
+          </div>
+        )}
+
+        {featured && (
           <section className="mt-7">
             <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-1">
               <h2 className="truncate text-sm font-semibold">Continue sua história</h2>
@@ -62,13 +76,13 @@ function Catalog() {
             </div>
             <Link
               to="/chat/$id"
-              params={{ id: mine[0].id }}
+              params={{ id: featured.id }}
               className="grid grid-cols-[5.5rem_minmax(0,1fr)_auto] items-center gap-3 overflow-hidden rounded-lg border border-border bg-card p-2 transition-colors hover:border-primary/60"
             >
-              <CharacterImage character={mine[0]} className="aspect-square size-[5.5rem] rounded-md" />
+              <CharacterImage character={featured} className="aspect-square size-[5.5rem] rounded-md" />
               <div className="min-w-0">
-                <h3 className="truncate font-semibold">{mine[0].name}</h3>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{mine[0].opening_scene || mine[0].description}</p>
+                <h3 className="truncate font-semibold">{featured.name}</h3>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{featured.opening_scene || featured.description}</p>
               </div>
               <span className="pr-2 text-xl text-primary" aria-hidden="true">→</span>
             </Link>
