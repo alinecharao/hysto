@@ -295,21 +295,21 @@ export const Route = createFileRoute("/api/chat")({
               // permanent system prompt, but trim conversational history only
               // for Groq so larger story messages still fit without weakening
               // the other providers.
-              if (provider.id === "groq" && Array.isArray(originalBody.messages)) {
-                const promptMessages = originalBody.messages.filter(
+              if (provider.id === "groq" && Array.isArray(originalBody["messages"])) {
+                const promptMessages = originalBody["messages"].filter(
                   (message): message is Record<string, unknown> =>
                     Boolean(message) && typeof message === "object",
                 );
                 const systemMessages = promptMessages.filter(
-                  (message) => message.role === "system",
+                  (message) => message["role"] === "system",
                 );
                 const conversationMessages = promptMessages.filter(
-                  (message) => message.role !== "system",
+                  (message) => message["role"] !== "system",
                 );
 
                 const groqMaxCompletionTokens = Math.min(
-                  typeof originalBody.max_tokens === "number"
-                    ? originalBody.max_tokens
+                  typeof originalBody["max_tokens"] === "number"
+                    ? originalBody["max_tokens"]
                     : 1600,
                   1600,
                 );
@@ -326,7 +326,7 @@ export const Route = createFileRoute("/api/chat")({
                     : "none",
                 };
 
-                delete requestBody.max_tokens;
+                delete requestBody["max_tokens"];
               }
 
               const response = await fetch(`${provider.baseURL}/chat/completions`, {

@@ -10,6 +10,8 @@ export const Route = createFileRoute("/_authenticated/characters/new")({
       { name: "description", content: "Crie um personagem de IA com personalidade própria." },
       { property: "og:title", content: "Novo personagem — Hysto" },
       { property: "og:description", content: "Crie um personagem de IA com personalidade própria." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: NewCharacter,

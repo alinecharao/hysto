@@ -11,6 +11,8 @@ export const Route = createFileRoute("/_authenticated/characters/$id/edit")({
       { name: "description", content: "Ajuste a personalidade e as instruções do personagem." },
       { property: "og:title", content: "Editar personagem — Hysto" },
       { property: "og:description", content: "Ajuste a personalidade e as instruções do personagem." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   loader: ({ context, params }) => context.queryClient.ensureQueryData(characterQuery(params.id)),
