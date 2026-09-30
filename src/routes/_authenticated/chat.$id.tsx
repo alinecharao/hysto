@@ -164,9 +164,13 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     const text = messageText(message);
     let persistedIndex = (data ?? []).findIndex((item) => item.id === message.id);
     if (persistedIndex < 0) {
-      persistedIndex = (data ?? []).findLastIndex(
-        (item) => item.role === message.role && item.content === text,
-      );
+      for (let index = (data ?? []).length - 1; index >= 0; index -= 1) {
+        const item = data?.[index];
+        if (item?.role === message.role && item.content === text) {
+          persistedIndex = index;
+          break;
+        }
+      }
     }
     if (persistedIndex < 0) return;
 
@@ -202,9 +206,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
 
     try {
       await removeMessageAndFollowing(message);
-      setMessages((current) => current.slice(0, index));
       setErrorHidden(true);
-      await regenerate();
+      await regenerate({ messageId: message.id });
     } catch (regenerateError) {
       alert(regenerateError instanceof Error ? regenerateError.message : "Não foi possível gerar uma nova resposta.");
     }
@@ -338,7 +341,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
                 text={messageText(message)}
                 busy={busy}
                 onDelete={() => void deleteMessage(message, index)}
-                onRegenerate={message.role === "assistant" ? () => void regenerateMessage(message, index) : undefined}
+                {...(message.role === "assistant" ? { onRegenerate: () => void regenerateMessage(message, index) } : {})}
               />
             ))}
             {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
