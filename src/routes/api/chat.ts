@@ -63,6 +63,101 @@ function formatLockRemaining(ms: number) {
   return hours === 1 ? "1 hora" : `${hours} horas`;
 }
 
+
+type CharacterPromptSections = {
+  canon: string;
+  currentStory: string;
+  styleExamples: string;
+};
+
+function extractTaggedSection(source: string, tag: string) {
+  const match = source.match(new RegExp(`<${tag}>([\\s\\S]*?)<\\/${tag}>`, "i"));
+  return match?.[1]?.trim() ?? "";
+}
+
+function stripTaggedSections(source: string) {
+  return source
+    .replace(/<CHARACTER_CANON>[\s\S]*?<\/CHARACTER_CANON>/gi, "")
+    .replace(/<CURRENT_STORY>[\s\S]*?<\/CURRENT_STORY>/gi, "")
+    .replace(/<STYLE_EXAMPLES>[\s\S]*?<\/STYLE_EXAMPLES>/gi, "")
+    .trim();
+}
+
+function buildCharacterPromptSections(character: {
+  description: string | null;
+  background: string | null;
+  gender: string | null;
+  tags: string[] | null;
+  opening_scene: string | null;
+}): CharacterPromptSections {
+  const background = character.background?.trim() ?? "";
+  const explicitCanon = extractTaggedSection(background, "CHARACTER_CANON");
+  const explicitCurrentStory = extractTaggedSection(background, "CURRENT_STORY");
+  const explicitStyleExamples = extractTaggedSection(background, "STYLE_EXAMPLES");
+  const untaggedBackground = stripTaggedSections(background);
+
+  const canon = [
+    character.description && `APRESENTAÇÃO: ${character.description}`,
+    explicitCanon,
+    untaggedBackground && `FUNDO PERMANENTE: ${untaggedBackground}`,
+    character.gender && `GÊNERO: ${character.gender}`,
+    character.tags?.length ? `TAGS/GÊNERO NARRATIVO: ${character.tags.join(", ")}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const currentStory = [
+    character.opening_scene && `CENA DE ABERTURA: ${character.opening_scene}`,
+    explicitCurrentStory,
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return {
+    canon,
+    currentStory,
+    styleExamples: explicitStyleExamples,
+  };
+}
+
+function serializeUserMessageForModel(content: string) {
+  const trimmed = content.trim();
+  if (!trimmed) return content;
+
+  const blocks: string[] = [];
+  const lines = trimmed.split(/\n+/);
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    if (/^"[^"]+"$/.test(line)) {
+      blocks.push(
+        `<DIALOGUE speaker="protagonist">\n${line.slice(1, -1).trim()}\n</DIALOGUE>`,
+      );
+      continue;
+    }
+
+    if (/^\*[^*]+\*$/.test(line)) {
+      blocks.push(
+        `<ACTION speaker="protagonist">\n${line.slice(1, -1).trim()}\n</ACTION>`,
+      );
+      continue;
+    }
+
+    if (/^\[[\s\S]+\]$/.test(line)) {
+      blocks.push(
+        `<INTERNAL_THOUGHT speaker="protagonist">\n${line.slice(1, -1).trim()}\n</INTERNAL_THOUGHT>`,
+      );
+      continue;
+    }
+
+    blocks.push(`<USER_TEXT>\n${line}\n</USER_TEXT>`);
+  }
+
+  return blocks.join("\n\n");
+}
+
 function getProviderConfigs(request: Request): ProviderConfig[] {
   const origin = new URL(request.url).origin;
   const configs: Array<ProviderConfig | null> = [
@@ -186,25 +281,22 @@ export const Route = createFileRoute("/api/chat")({
           return m && COMMANDS[m[1]!] ? COMMANDS[m[1]!]! : content;
         };
 
-        const lore = [
-          character.description && `APRESENTAÇÃO: ${character.description}`,
-          character.background && `FUNDO (memória permanente): ${character.background}`,
-          character.gender && `GÊNERO: ${character.gender}`,
-          character.tags?.length ? `TAGS/GÊNERO NARRATIVO: ${character.tags.join(", ")}` : "",
-          character.opening_scene && `CENA DE ABERTURA: ${character.opening_scene}`,
-        ]
-          .filter(Boolean)
-          .join("\n");
+        const promptSections = buildCharacterPromptSections(character);
 
         const system = [
           `Você é ${character.name}. Interprete este personagem com total fidelidade — voz, jeito de falar, valores, limites e falhas.`,
-          lore,
-          "ESTILO: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas (o que se mostra e o que se esconde). Ações e narração em *itálico*; falas em texto normal entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes; nunca entregue a resposta como um bloco contínuo de texto. Termine sempre num ponto que dê espaço para o usuário reagir. Nunca escreva falas ou pensamentos no lugar do usuário.",
-          "CONTINUIDADE: mantenha coerência com tudo o que já aconteceu — nomes, promessas, ferimentos, mudanças de relação, hora e lugar. Nunca contradiga o FUNDO nem repita cenas já vividas.",
+          `<CHARACTER_CANON>\n${promptSections.canon || "Sem informações adicionais."}\n</CHARACTER_CANON>`,
+          `<CURRENT_STORY>\n${promptSections.currentStory || "A história atual é definida apenas pelas mensagens desta conversa."}\n\nAs mensagens trocadas nesta conversa são fatos da história atual. Nada fora desta seção ou do histórico da conversa deve ser tratado como acontecimento já ocorrido.\n</CURRENT_STORY>`,
+          promptSections.styleExamples
+            ? `<STYLE_EXAMPLES>\nOs textos abaixo são APENAS exemplos de estilo. Eles NÃO fazem parte da história atual. Os acontecimentos, lugares, nomes e relações presentes nesses exemplos NÃO aconteceram, a menos que também estejam registrados em CURRENT_STORY ou no histórico real da conversa. Use apenas ritmo, personalidade, extensão, estilo de diálogo e comportamento do personagem. Ignore completamente os fatos narrativos dos exemplos.\n\n${promptSections.styleExamples}\n</STYLE_EXAMPLES>`
+            : "",
+          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história.",
+          "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <ACTION>, <DIALOGUE>, <INTERNAL_THOUGHT> e <USER_TEXT>. Trate essas marcações literalmente: ação é ação, diálogo é fala, pensamento interno não foi dito em voz alta. Nunca faça outro personagem reagir a um INTERNAL_THOUGHT como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
+          "ESTILO DE SAÍDA: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas. Use *ação ou narração* entre asteriscos e falas entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes. Termine num ponto que dê espaço para o usuário reagir. Nunca escreva falas, ações ou pensamentos no lugar do usuário.",
           body.thoughts
-            ? "PENSAMENTO: insira o monólogo interno do personagem dentro de <thought>...</thought> exatamente no ponto da cena em que ele surge — normalmente depois da ação, percepção ou fala que o provoca. Não coloque o pensamento automaticamente no início. Você pode intercalá-lo entre narração e falas, usando no total 1 a 3 frases em primeira pessoa, sinceras e que podem divergir do que o personagem diz em voz alta."
-            : "Não escreva blocos <thought>. Mantenha o monólogo interno implícito na narração.",
-          "Responda apenas em texto (sem imagens, áudio ou vídeo), em português do Brasil, a não ser que o usuário escreva em outro idioma.",
+            ? "PENSAMENTO DO PERSONAGEM: quando houver monólogo interno, escreva-o exclusivamente como [pensamento]...[/pensamento]. Use 1 a 3 frases em primeira pessoa e coloque-o exatamente no ponto em que surge. Pensamento não é fala e não pode ser percebido por outros personagens sem uma regra explícita da história."
+            : "Não escreva blocos [pensamento]...[/pensamento]. Mantenha o monólogo interno implícito na narração.",
+          "Responda apenas em texto, sem imagens, áudio ou vídeo, em português do Brasil, a não ser que o usuário escreva em outro idioma.",
         ]
           .filter(Boolean)
           .join("\n\n");
@@ -226,9 +318,20 @@ export const Route = createFileRoute("/api/chat")({
             : []),
           ...recent.map((m) => ({
             role: m.role as "user" | "assistant",
-            content: asDirective(m.content),
+            content:
+              m.role === "user"
+                ? asDirective(m.content) === m.content
+                  ? serializeUserMessageForModel(m.content)
+                  : asDirective(m.content)
+                : m.content,
           })),
-          { role: "user", content: asDirective(text) },
+          {
+            role: "user",
+            content:
+              asDirective(text) === text
+                ? serializeUserMessageForModel(text)
+                : asDirective(text),
+          },
         ];
 
 
