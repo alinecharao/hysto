@@ -2,17 +2,51 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Brain, ChevronLeft, Ellipsis, Info, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import {
+  Brain,
+  ChevronLeft,
+  Ellipsis,
+  Info,
+  Pencil,
+  RefreshCw,
+  RotateCcw,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import { PromptInput, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
+import {
+  Conversation,
+  ConversationContent,
+  ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import {
+  Message,
+  MessageAction,
+  MessageActions,
+  MessageContent,
+  MessageResponse,
+} from "@/components/ai-elements/message";
+import {
+  PromptInput,
+  PromptInputSubmit,
+  PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { supabase } from "@/integrations/supabase/client";
 import lunaPortrait from "@/assets/luna-portrait.jpg";
@@ -80,11 +114,26 @@ function ChatPage() {
 
 function Avatar({ character, className }: { character: Character; className: string }) {
   const image = characterImage(character);
-  if (image) return <img src={image} alt={character.name} className={`${className} shrink-0 rounded-full object-cover`} />;
-  return <span className={`${className} flex shrink-0 items-center justify-center rounded-full bg-secondary`}>{character.avatar}</span>;
+  if (image)
+    return (
+      <img
+        src={image}
+        alt={character.name}
+        className={`${className} shrink-0 rounded-full object-cover`}
+      />
+    );
+  return (
+    <span
+      className={`${className} flex shrink-0 items-center justify-center rounded-full bg-secondary`}
+    >
+      {character.avatar}
+    </span>
+  );
 }
 
-function ChatWindow({ character, stored }: { character: Character; stored: { id: string; role: string; content: string }[] }) {
+type StoredMessage = { id: string; role: string; content: string; created_at: string };
+
+function ChatWindow({ character, stored }: { character: Character; stored: StoredMessage[] }) {
   const { user } = Route.useRouteContext();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
@@ -99,7 +148,14 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
 
   useEffect(() => {
     const saved = window.localStorage.getItem("hysto-ai-provider");
-    if (saved === "auto" || saved === "gemini" || saved === "groq" || saved === "openrouter" || saved === "kimi" || saved === "openai") {
+    if (
+      saved === "auto" ||
+      saved === "gemini" ||
+      saved === "groq" ||
+      saved === "openrouter" ||
+      saved === "kimi" ||
+      saved === "openai"
+    ) {
       setAiProvider(saved);
     }
   }, []);
@@ -111,25 +167,42 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   const image = characterImage(character);
 
   const initial = useMemo<UIMessage[]>(
-    () => stored.map((m) => ({ id: m.id, role: m.role as "user" | "assistant", parts: [{ type: "text", text: m.content }] })),
+    () =>
+      stored.map((m) => ({
+        id: m.id,
+        role: m.role as "user" | "assistant",
+        parts: [{ type: "text", text: m.content }],
+      })),
     [stored],
   );
   const transport = useMemo(
-    () => new DefaultChatTransport({
-      api: "/api/chat",
-      headers: async (): Promise<Record<string, string>> => {
-        const { data } = await supabase.auth.getSession();
-        return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
-      },
-      prepareSendMessagesRequest: ({ messages, headers }) => {
-        const last = messages[messages.length - 1];
-        const text = (last?.parts ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
-        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current, provider: aiProviderRef.current } };
-      },
-    }),
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        headers: async (): Promise<Record<string, string>> => {
+          const { data } = await supabase.auth.getSession();
+          return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+        },
+        prepareSendMessagesRequest: ({ messages, headers, trigger }) => {
+          const last = messages[messages.length - 1];
+          const text = (last?.parts ?? [])
+            .map((part) => (part.type === "text" ? part.text : ""))
+            .join("");
+          return {
+            ...(headers ? { headers } : {}),
+            body: {
+              characterId: character.id,
+              text,
+              thoughts: thoughtsRef.current,
+              provider: aiProviderRef.current,
+              regenerate: trigger === "regenerate-message",
+            },
+          };
+        },
+      }),
     [character.id],
   );
-  const { messages, sendMessage, status, error, setMessages, stop } = useChat({
+  const { messages, sendMessage, regenerate, status, error, setMessages, stop } = useChat({
     id: character.id,
     messages: initial,
     transport,
@@ -144,17 +217,81 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
 
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
-    const { error: deleteError } = await supabase.from("messages").delete().eq("character_id", character.id);
+    const { error: deleteError } = await supabase
+      .from("messages")
+      .delete()
+      .eq("character_id", character.id);
     if (deleteError) return alert(deleteError.message);
     setMessages([]);
     qc.invalidateQueries({ queryKey: ["messages", character.id] });
   }
 
+  async function removeMessageAndFollowing(message: UIMessage) {
+    const { data, error: loadError } = await supabase
+      .from("messages")
+      .select("id, role, content, created_at")
+      .eq("character_id", character.id)
+      .order("created_at");
+
+    if (loadError) throw loadError;
+
+    const text = messageText(message);
+    let persistedIndex = (data ?? []).findIndex((item) => item.id === message.id);
+    if (persistedIndex < 0) {
+      for (let index = (data ?? []).length - 1; index >= 0; index -= 1) {
+        const item = data?.[index];
+        if (item?.role === message.role && item.content === text) {
+          persistedIndex = index;
+          break;
+        }
+      }
+    }
+    if (persistedIndex < 0) return;
+
+    const ids = (data ?? []).slice(persistedIndex).map((item) => item.id);
+    if (ids.length === 0) return;
+
+    const { error: deleteError } = await supabase.from("messages").delete().in("id", ids);
+    if (deleteError) throw deleteError;
+  }
+
+  async function deleteMessage(message: UIMessage, index: number) {
+    const hasFollowing = index < messages.length - 1;
+    const prompt = hasFollowing
+      ? "Apagar esta mensagem e todas as mensagens seguintes?"
+      : "Apagar esta mensagem?";
+    if (!confirm(prompt)) return;
+
+    try {
+      await removeMessageAndFollowing(message);
+      setMessages((current) => current.slice(0, index));
+      setErrorHidden(true);
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    } catch (deleteError) {
+      alert(
+        deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a mensagem.",
+      );
+    }
+  }
+
+  async function regenerateMessage(message: UIMessage, index: number) {
+    if (busy || !confirm("Substituir esta resposta por uma nova?")) return;
+
+    try {
+      await removeMessageAndFollowing(message);
+      setErrorHidden(true);
+      await regenerate({ messageId: message.id });
+    } catch (regenerateError) {
+      alert(
+        regenerateError instanceof Error
+          ? regenerateError.message
+          : "Não foi possível gerar uma nova resposta.",
+      );
+    }
+  }
 
   function messageText(message: UIMessage) {
-    return (message.parts ?? [])
-      .map((part) => (part.type === "text" ? part.text : ""))
-      .join("");
+    return (message.parts ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
   }
 
   function lastUserMessage() {
@@ -175,10 +312,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     if (findError) throw findError;
     if (!data?.id) return;
 
-    const { error: deleteError } = await supabase
-      .from("messages")
-      .delete()
-      .eq("id", data.id);
+    const { error: deleteError } = await supabase.from("messages").delete().eq("id", data.id);
 
     if (deleteError) throw deleteError;
   }
@@ -213,7 +347,9 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
       setErrorHidden(true);
       await qc.invalidateQueries({ queryKey: ["messages", character.id] });
     } catch (deleteError) {
-      alert(deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a mensagem.");
+      alert(
+        deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a mensagem.",
+      );
     }
   }
 
@@ -230,7 +366,9 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
       setErrorHidden(true);
       await sendMessage({ text });
     } catch (retryError) {
-      alert(retryError instanceof Error ? retryError.message : "Não foi possível reenviar a mensagem.");
+      alert(
+        retryError instanceof Error ? retryError.message : "Não foi possível reenviar a mensagem.",
+      );
     }
   }
 
@@ -245,34 +383,82 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         )}
 
         <header className="relative z-20 grid h-16 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-border/50 bg-background/80 px-3 backdrop-blur-xl sm:h-auto sm:px-5 sm:py-3">
-          <Button asChild variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Voltar ao catálogo">
-            <Link to="/dashboard"><ChevronLeft /></Link>
+          <Button
+            asChild
+            variant="ghost"
+            size="icon"
+            className="shrink-0 rounded-full"
+            aria-label="Voltar ao catálogo"
+          >
+            <Link to="/dashboard">
+              <ChevronLeft />
+            </Link>
           </Button>
-          <button type="button" onClick={() => setOpenInfo(true)} className="flex min-w-0 items-center justify-center gap-2 text-left" aria-label={`Abrir cartão de ${character.name}`}>
+          <button
+            type="button"
+            onClick={() => setOpenInfo(true)}
+            className="flex min-w-0 items-center justify-center gap-2 text-left"
+            aria-label={`Abrir cartão de ${character.name}`}
+          >
             <Avatar character={character} className="size-8 text-base" />
             <span className="truncate font-sans text-sm font-semibold">{character.name}</span>
           </button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="shrink-0 rounded-full" aria-label="Opções da conversa"><Ellipsis /></Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="shrink-0 rounded-full"
+                aria-label="Opções da conversa"
+              >
+                <Ellipsis />
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-52">
-              <DropdownMenuItem onSelect={() => setOpenInfo(true)}><Info /> Ver personagem</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setOpenInfo(true)}>
+                <Info /> Ver personagem
+              </DropdownMenuItem>
               {character.user_id === user.id && (
-                <DropdownMenuItem asChild><Link to="/characters/$id/edit" params={{ id: character.id }}><Pencil /> Editar personagem</Link></DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link to="/characters/$id/edit" params={{ id: character.id }}>
+                    <Pencil /> Editar personagem
+                  </Link>
+                </DropdownMenuItem>
               )}
-              <DropdownMenuItem onSelect={() => void clearHistory()} className="text-destructive"><Trash2 /> Limpar conversa</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => void clearHistory()} className="text-destructive">
+                <Trash2 /> Limpar conversa
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
 
         <Conversation className="relative z-10 min-h-0">
           <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-4 pb-8 pt-6 sm:px-5 sm:py-8">
-            {character.opening_scene && <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />}
-            {messages.map((message) => (
-              <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
+            {character.opening_scene && (
+              <Bubble
+                role="assistant"
+                text={character.opening_scene}
+                character={character}
+                showThoughts={showThoughts}
+              />
+            )}
+            {messages.map((message, index) => (
+              <Bubble
+                key={message.id}
+                role={message.role}
+                character={character}
+                showThoughts={showThoughts}
+                text={messageText(message)}
+                busy={busy}
+                onDelete={() => void deleteMessage(message, index)}
+                {...(message.role === "assistant"
+                  ? { onRegenerate: () => void regenerateMessage(message, index) }
+                  : {})}
+              />
             ))}
-            {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
+            {status === "submitted" && (
+              <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>
+            )}
             {error && !errorHidden && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
                 <p>{error.message || "Não foi possível obter resposta."}</p>
@@ -309,7 +495,10 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         <footer className="relative z-20 shrink-0 border-t border-border/40 bg-background/85 px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-5 sm:py-4">
           <div className="mx-auto max-w-3xl space-y-2">
             <div className="flex items-center gap-2 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <Select value={aiProvider} onValueChange={(value) => changeAiProvider(value as AiProvider)}>
+              <Select
+                value={aiProvider}
+                onValueChange={(value) => changeAiProvider(value as AiProvider)}
+              >
                 <SelectTrigger className="h-8 w-[138px] shrink-0 rounded-full border-primary/35 bg-chat-glass px-3 text-xs">
                   <span className="mr-1">✨</span>
                   <SelectValue>{AI_PROVIDER_LABELS[aiProvider]}</SelectValue>
@@ -324,8 +513,17 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
                 </SelectContent>
               </Select>
               {SCENE_COMMANDS.map((command) => (
-                <Button key={command.id} type="button" variant="outline" size="sm" disabled={busy} onClick={() => sendMessage({ text: commandMarker(command.id) })} className="shrink-0 rounded-full border-primary/35 bg-chat-glass text-xs">
-                  <span>{command.icon}</span>{command.label}
+                <Button
+                  key={command.id}
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => sendMessage({ text: commandMarker(command.id) })}
+                  className="shrink-0 rounded-full border-primary/35 bg-chat-glass text-xs"
+                >
+                  <span>{command.icon}</span>
+                  {command.label}
                 </Button>
               ))}
             </div>
@@ -356,51 +554,156 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
           </div>
         </footer>
 
-        <CharacterDialog character={character} open={openInfo} onOpenChange={setOpenInfo} showThoughts={showThoughts} onThoughtsChange={setShowThoughts} />
+        <CharacterDialog
+          character={character}
+          open={openInfo}
+          onOpenChange={setOpenInfo}
+          showThoughts={showThoughts}
+          onThoughtsChange={setShowThoughts}
+        />
       </div>
     </TooltipProvider>
   );
 }
 
-function CharacterDialog({ character, open, onOpenChange, showThoughts, onThoughtsChange }: { character: Character; open: boolean; onOpenChange: (open: boolean) => void; showThoughts: boolean; onThoughtsChange: (value: boolean) => void }) {
+function CharacterDialog({
+  character,
+  open,
+  onOpenChange,
+  showThoughts,
+  onThoughtsChange,
+}: {
+  character: Character;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  showThoughts: boolean;
+  onThoughtsChange: (value: boolean) => void;
+}) {
   const image = characterImage(character);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="h-[100dvh] w-full max-w-md gap-0 overflow-hidden rounded-none border-0 bg-background p-0 sm:h-[90dvh] sm:rounded-lg sm:border">
         <div className="relative min-h-[48dvh] shrink-0 overflow-hidden bg-secondary sm:min-h-[24rem]">
-          {image ? <img src={image} alt={character.name} className="size-full object-cover object-top" /> : <div className="flex size-full items-center justify-center text-8xl">{character.avatar}</div>}
+          {image ? (
+            <img src={image} alt={character.name} className="size-full object-cover object-top" />
+          ) : (
+            <div className="flex size-full items-center justify-center text-8xl">
+              {character.avatar}
+            </div>
+          )}
           <div className="absolute inset-0 bg-gradient-to-t from-background via-background/5 to-transparent" />
           <div className="absolute inset-x-0 bottom-0 px-5 pb-5">
-            <DialogTitle className="max-w-[90%] text-3xl font-bold leading-tight sm:text-4xl">{character.name}</DialogTitle>
-            <DialogDescription className="mt-2 line-clamp-3 text-sm leading-relaxed text-foreground/85">{character.description}</DialogDescription>
+            <DialogTitle className="max-w-[90%] text-3xl font-bold leading-tight sm:text-4xl">
+              {character.name}
+            </DialogTitle>
+            <DialogDescription className="mt-2 line-clamp-3 text-sm leading-relaxed text-foreground/85">
+              {character.description}
+            </DialogDescription>
           </div>
         </div>
         <div className="space-y-5 overflow-y-auto px-5 pb-28 pt-2">
           <div className="flex flex-wrap gap-2">
-            {character.gender && <span className="rounded-full bg-secondary px-3 py-1 text-xs">{character.gender}</span>}
-            {character.tags.map((tag) => <span key={tag} className="rounded-full bg-secondary px-3 py-1.5 text-xs">{tag}</span>)}
+            {character.gender && (
+              <span className="rounded-full bg-secondary px-3 py-1 text-xs">
+                {character.gender}
+              </span>
+            )}
+            {character.tags.map((tag) => (
+              <span key={tag} className="rounded-full bg-secondary px-3 py-1.5 text-xs">
+                {tag}
+              </span>
+            ))}
           </div>
           <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-secondary px-4 py-3">
             <Brain className="size-5 shrink-0 text-primary" />
-            <div className="min-w-0"><p className="truncate text-sm font-medium">Pensamentos do personagem</p><p className="text-xs text-muted-foreground">Mostrar emoções internas</p></div>
-            <Switch checked={showThoughts} onCheckedChange={onThoughtsChange} aria-label="Mostrar pensamentos" />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">Pensamentos do personagem</p>
+              <p className="text-xs text-muted-foreground">Mostrar emoções internas</p>
+            </div>
+            <Switch
+              checked={showThoughts}
+              onCheckedChange={onThoughtsChange}
+              aria-label="Mostrar pensamentos"
+            />
           </div>
-          {character.opening_scene && <div className="border-t border-border pt-4"><h3 className="mb-2 text-base font-semibold">Cena de abertura</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.opening_scene}</p></div>}
-          {character.background && <div className="border-t border-border pt-4"><h3 className="mb-2 text-base font-semibold">Sobre</h3><p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">{character.background}</p></div>}
+          {character.opening_scene && (
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-2 text-base font-semibold">Cena de abertura</h3>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                {character.opening_scene}
+              </p>
+            </div>
+          )}
+          {character.background && (
+            <div className="border-t border-border pt-4">
+              <h3 className="mb-2 text-base font-semibold">Sobre</h3>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                {character.background}
+              </p>
+            </div>
+          )}
         </div>
         <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-background via-background to-transparent px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-8">
-          <Button type="button" size="lg" className="h-12 w-full rounded-full font-semibold" onClick={() => onOpenChange(false)}>Continuar história</Button>
+          <Button
+            type="button"
+            size="lg"
+            className="h-12 w-full rounded-full font-semibold"
+            onClick={() => onOpenChange(false)}
+          >
+            Continuar história
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function Bubble({ role, text, character, showThoughts }: { role: string; text: string; character: Character; showThoughts: boolean }) {
+function Bubble({
+  role,
+  text,
+  character,
+  showThoughts,
+  busy = false,
+  onDelete,
+  onRegenerate,
+}: {
+  role: string;
+  text: string;
+  character: Character;
+  showThoughts: boolean;
+  busy?: boolean;
+  onDelete?: () => void;
+  onRegenerate?: () => void;
+}) {
   if (role === "user") {
     const command = parseCommand(text);
-    if (command) return <div className="flex justify-center"><span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">{command.icon} {command.label}</span></div>;
-    return <Message from="user"><MessageContent className="whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent></Message>;
+    return (
+      <Message from="user">
+        {command ? (
+          <div className="flex justify-center">
+            <span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">
+              {command.icon} {command.label}
+            </span>
+          </div>
+        ) : (
+          <MessageContent className="whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">
+            {text}
+          </MessageContent>
+        )}
+        {onDelete && (
+          <MessageActions className="justify-end opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <MessageAction
+              tooltip="Apagar mensagem"
+              label="Apagar mensagem"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3.5" />
+            </MessageAction>
+          </MessageActions>
+        )}
+      </Message>
+    );
   }
   const segments = parseNarrativeSegments(text);
   return (
@@ -408,12 +711,48 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
       <MessageContent className="w-full gap-4 rounded-3xl border border-border/30 bg-chat-panel px-5 py-5 shadow-xl backdrop-blur-md sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none sm:backdrop-blur-none">
         {segments.map((segment, index) =>
           segment.type === "thought" ? (
-            showThoughts && <div key={`${segment.type}-${index}`} className="whitespace-pre-wrap break-words border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground">{segment.text}</div>
+            showThoughts && (
+              <div
+                key={`${segment.type}-${index}`}
+                className="whitespace-pre-wrap break-words border-l-2 border-primary/50 pl-3 text-sm italic text-muted-foreground"
+              >
+                {segment.text}
+              </div>
+            )
           ) : (
-            <MessageResponse key={`${segment.type}-${index}`} className="prose-chat whitespace-pre-wrap break-words text-[17px] leading-[1.55] sm:text-[15px]">{segment.text}</MessageResponse>
+            <MessageResponse
+              key={`${segment.type}-${index}`}
+              className="prose-chat whitespace-pre-wrap break-words text-[17px] leading-[1.55] sm:text-[15px]"
+            >
+              {segment.text}
+            </MessageResponse>
           ),
         )}
       </MessageContent>
+      {(onRegenerate || onDelete) && (
+        <MessageActions className="px-1 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {onRegenerate && (
+            <MessageAction
+              tooltip="Gerar novamente"
+              label="Gerar novamente"
+              disabled={busy}
+              onClick={onRegenerate}
+            >
+              <RefreshCw className="size-3.5" />
+            </MessageAction>
+          )}
+          {onDelete && (
+            <MessageAction
+              tooltip="Apagar mensagem"
+              label="Apagar mensagem"
+              disabled={busy}
+              onClick={onDelete}
+            >
+              <Trash2 className="size-3.5" />
+            </MessageAction>
+          )}
+        </MessageActions>
+      )}
     </Message>
   );
 }

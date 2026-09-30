@@ -10,7 +10,6 @@ const json = (status: number, error: string) =>
     headers: { "Content-Type": "application/json" },
   });
 
-
 type AiProvider = "auto" | "gemini" | "groq" | "openrouter" | "kimi" | "openai";
 type ConcreteProvider = Exclude<AiProvider, "auto">;
 
@@ -23,8 +22,9 @@ type ProviderConfig = {
   headers?: Record<string, string>;
 };
 
-const RETRYABLE_PROVIDER_STATUS = new Set([401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504]);
-
+const RETRYABLE_PROVIDER_STATUS = new Set([
+  401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504,
+]);
 
 const MODEL_DAILY_LOCK_MS = 24 * 60 * 60 * 1000;
 const modelLocks = new Map<string, number>();
@@ -48,14 +48,14 @@ function getModelLockRemaining(provider: ConcreteProvider, model: string) {
 }
 
 function getProviderAvailableModels(provider: ProviderConfig) {
-  return provider.models.filter(
-    (model) => getModelLockRemaining(provider.id, model) === 0,
-  );
+  return provider.models.filter((model) => getModelLockRemaining(provider.id, model) === 0);
 }
 
 function looksLikeDailyQuotaError(status: number, body: string) {
   if (status !== 429) return false;
-  return /daily|per day|requests per day|tokens per day|\brpd\b|\btpd\b|day quota|quota.{0,20}day/i.test(body);
+  return /daily|per day|requests per day|tokens per day|\brpd\b|\btpd\b|day quota|quota.{0,20}day/i.test(
+    body,
+  );
 }
 
 function formatLockRemaining(ms: number) {
@@ -85,10 +85,7 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
           label: "Groq",
           apiKey: process.env["GROQ_API_KEY"]!,
           baseURL: "https://api.groq.com/openai/v1",
-          models: [
-            process.env["GROQ_MODEL"] || "qwen/qwen3.8-27b",
-            "openai/gpt-oss-20b",
-          ],
+          models: [process.env["GROQ_MODEL"] || "qwen/qwen3.8-27b", "openai/gpt-oss-20b"],
         }
       : null,
     process.env["OPENROUTER_API_KEY"]
@@ -149,6 +146,7 @@ export const Route = createFileRoute("/api/chat")({
           text?: string;
           thoughts?: boolean;
           provider?: AiProvider;
+          regenerate?: boolean;
         };
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
@@ -167,10 +165,12 @@ export const Route = createFileRoute("/api/chat")({
           .order("created_at");
         if (histErr) return json(500, histErr.message);
 
-        const { error: insErr } = await supabase
-          .from("messages")
-          .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
-        if (insErr) return json(500, insErr.message);
+        if (!body.regenerate) {
+          const { error: insErr } = await supabase
+            .from("messages")
+            .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
+          if (insErr) return json(500, insErr.message);
+        }
 
         const COMMANDS: Record<string, string> = {
           advance:
@@ -228,12 +228,15 @@ export const Route = createFileRoute("/api/chat")({
             role: m.role as "user" | "assistant",
             content: asDirective(m.content),
           })),
-          { role: "user", content: asDirective(text) },
+          ...(body.regenerate ? [] : [{ role: "user" as const, content: asDirective(text) }]),
         ];
 
-
         const requestedProvider: AiProvider =
-          body.provider === "gemini" || body.provider === "groq" || body.provider === "openrouter" || body.provider === "kimi" || body.provider === "openai"
+          body.provider === "gemini" ||
+          body.provider === "groq" ||
+          body.provider === "openrouter" ||
+          body.provider === "kimi" ||
+          body.provider === "openai"
             ? body.provider
             : "auto";
 
@@ -279,9 +282,7 @@ export const Route = createFileRoute("/api/chat")({
         const orderedProviders =
           requestedProvider === "auto"
             ? providersWithAvailableModels
-            : providersWithAvailableModels.filter(
-                (provider) => provider.id === requestedProvider,
-              );
+            : providersWithAvailableModels.filter((provider) => provider.id === requestedProvider);
 
         if (orderedProviders.length === 0) {
           return json(
@@ -339,14 +340,9 @@ export const Route = createFileRoute("/api/chat")({
 
                 requestBody = {
                   ...requestBody,
-                  messages: [
-                    ...systemMessages.slice(0, 1),
-                    ...conversationMessages.slice(-4),
-                  ],
+                  messages: [...systemMessages.slice(0, 1), ...conversationMessages.slice(-4)],
                   max_completion_tokens: groqMaxCompletionTokens,
-                  reasoning_effort: model.startsWith("openai/gpt-oss")
-                    ? "low"
-                    : "none",
+                  reasoning_effort: model.startsWith("openai/gpt-oss") ? "low" : "none",
                 };
 
                 delete requestBody["max_tokens"];
