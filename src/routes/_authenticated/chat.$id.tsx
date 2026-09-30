@@ -161,12 +161,12 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     return [...messages].reverse().find((message) => message.role === "user") ?? null;
   }
 
-  async function removeLatestPersistedUserMessage(text: string) {
+  async function removeLatestPersistedMessage(role: "user" | "assistant", text: string) {
     const { data, error: findError } = await supabase
       .from("messages")
       .select("id")
       .eq("character_id", character.id)
-      .eq("role", "user")
+      .eq("role", role)
       .eq("content", text)
       .order("created_at", { ascending: false })
       .limit(1)
@@ -181,6 +181,10 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
       .eq("id", data.id);
 
     if (deleteError) throw deleteError;
+  }
+
+  async function removeLatestPersistedUserMessage(text: string) {
+    return removeLatestPersistedMessage("user", text);
   }
 
   function removeLastLocalUserMessage() {
@@ -234,6 +238,70 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     }
   }
 
+
+  async function deleteAssistantMessage(message: UIMessage) {
+    if (busy || message.role !== "assistant") return;
+
+    const text = messageText(message).trim();
+    if (!text) return;
+
+    try {
+      await removeLatestPersistedMessage("assistant", text);
+      setMessages(messages.filter((item) => item.id !== message.id));
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a resposta.");
+    }
+  }
+
+  async function regenerateAssistantMessage(message: UIMessage, index: number) {
+    if (busy || message.role !== "assistant") return;
+
+    let previousUserIndex = index - 1;
+    while (previousUserIndex >= 0 && messages[previousUserIndex]?.role !== "user") {
+      previousUserIndex -= 1;
+    }
+
+    const previousUser = previousUserIndex >= 0 ? messages[previousUserIndex] : null;
+    if (!previousUser) return;
+
+    const assistantText = messageText(message).trim();
+    const userText = messageText(previousUser).trim();
+    if (!assistantText || !userText) return;
+
+    try {
+      await removeLatestPersistedMessage("assistant", assistantText);
+      await removeLatestPersistedUserMessage(userText);
+
+      setMessages(
+        messages.filter(
+          (item) => item.id !== message.id && item.id !== previousUser.id,
+        ),
+      );
+
+      setErrorHidden(true);
+      await sendMessage({ text: userText });
+    } catch (retryError) {
+      alert(retryError instanceof Error ? retryError.message : "Não foi possível gerar uma nova resposta.");
+    }
+  }
+
+  async function generateFromExistingUser(message: UIMessage) {
+    if (busy || message.role !== "user") return;
+
+    const text = messageText(message).trim();
+    if (!text) return;
+
+    try {
+      await removeLatestPersistedUserMessage(text);
+      setMessages(messages.filter((item) => item.id !== message.id));
+      setErrorHidden(true);
+      await sendMessage({ text });
+    } catch (retryError) {
+      alert(retryError instanceof Error ? retryError.message : "Não foi possível gerar a resposta.");
+    }
+  }
+
   return (
     <TooltipProvider>
       <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background">
@@ -269,9 +337,58 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         <Conversation className="relative z-10 min-h-0">
           <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-4 pb-8 pt-6 sm:px-5 sm:py-8">
             {character.opening_scene && <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />}
-            {messages.map((message) => (
-              <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
-            ))}
+            {messages.map((message, index) => {
+              const isLatestMessage = index === messages.length - 1;
+              const canManageAssistant = message.role === "assistant" && isLatestMessage;
+              const canGenerateFromUser = message.role === "user" && isLatestMessage && !error;
+
+              return (
+                <div key={message.id} className="group/message">
+                  <Bubble role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
+                  {canManageAssistant && (
+                    <div className="mt-1 flex items-center justify-start gap-1 px-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void regenerateAssistantMessage(message, index)}
+                        className="h-8 rounded-full px-2.5 text-xs text-muted-foreground opacity-100 transition hover:text-foreground sm:opacity-0 sm:group-hover/message:opacity-100"
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Gerar novamente
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void deleteAssistantMessage(message)}
+                        className="h-8 rounded-full px-2.5 text-xs text-muted-foreground opacity-100 transition hover:text-destructive sm:opacity-0 sm:group-hover/message:opacity-100"
+                      >
+                        <Trash2 className="size-3.5" />
+                        Apagar
+                      </Button>
+                    </div>
+                  )}
+                  {canGenerateFromUser && (
+                    <div className="mt-1 flex justify-end px-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => void generateFromExistingUser(message)}
+                        className="h-8 rounded-full px-2.5 text-xs text-muted-foreground hover:text-foreground"
+                      >
+                        <RotateCcw className="size-3.5" />
+                        Gerar resposta
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
             {error && !errorHidden && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
