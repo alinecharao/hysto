@@ -71,7 +71,7 @@ export const messagesQuery = (characterId: string) =>
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select("id, role, content")
+        .select("id, role, content, created_at")
         .eq("character_id", characterId)
         .order("created_at");
       if (error) throw error;

@@ -2,10 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Brain, ChevronLeft, Ellipsis, Info, Pencil, RotateCcw, Trash2 } from "lucide-react";
+import { Brain, ChevronLeft, Ellipsis, Info, Pencil, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { Message, MessageAction, MessageActions, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { PromptInput, PromptInputSubmit, PromptInputTextarea } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Button } from "@/components/ui/button";
@@ -84,7 +84,9 @@ function Avatar({ character, className }: { character: Character; className: str
   return <span className={`${className} flex shrink-0 items-center justify-center rounded-full bg-secondary`}>{character.avatar}</span>;
 }
 
-function ChatWindow({ character, stored }: { character: Character; stored: { id: string; role: string; content: string }[] }) {
+type StoredMessage = { id: string; role: string; content: string; created_at: string };
+
+function ChatWindow({ character, stored }: { character: Character; stored: StoredMessage[] }) {
   const { user } = Route.useRouteContext();
   const qc = useQueryClient();
   const [input, setInput] = useState("");
@@ -121,15 +123,15 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         const { data } = await supabase.auth.getSession();
         return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
       },
-      prepareSendMessagesRequest: ({ messages, headers }) => {
+      prepareSendMessagesRequest: ({ messages, headers, trigger }) => {
         const last = messages[messages.length - 1];
         const text = (last?.parts ?? []).map((part) => (part.type === "text" ? part.text : "")).join("");
-        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current, provider: aiProviderRef.current } };
+        return { ...(headers ? { headers } : {}), body: { characterId: character.id, text, thoughts: thoughtsRef.current, provider: aiProviderRef.current, regenerate: trigger === "regenerate-message" } };
       },
     }),
     [character.id],
   );
-  const { messages, sendMessage, status, error, setMessages, stop } = useChat({
+  const { messages, sendMessage, regenerate, status, error, setMessages, stop } = useChat({
     id: character.id,
     messages: initial,
     transport,
@@ -148,6 +150,64 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     if (deleteError) return alert(deleteError.message);
     setMessages([]);
     qc.invalidateQueries({ queryKey: ["messages", character.id] });
+  }
+
+  async function removeMessageAndFollowing(message: UIMessage) {
+    const { data, error: loadError } = await supabase
+      .from("messages")
+      .select("id, role, content, created_at")
+      .eq("character_id", character.id)
+      .order("created_at");
+
+    if (loadError) throw loadError;
+
+    const text = messageText(message);
+    let persistedIndex = (data ?? []).findIndex((item) => item.id === message.id);
+    if (persistedIndex < 0) {
+      persistedIndex = (data ?? []).findLastIndex(
+        (item) => item.role === message.role && item.content === text,
+      );
+    }
+    if (persistedIndex < 0) return;
+
+    const ids = (data ?? []).slice(persistedIndex).map((item) => item.id);
+    if (ids.length === 0) return;
+
+    const { error: deleteError } = await supabase
+      .from("messages")
+      .delete()
+      .in("id", ids);
+    if (deleteError) throw deleteError;
+  }
+
+  async function deleteMessage(message: UIMessage, index: number) {
+    const hasFollowing = index < messages.length - 1;
+    const prompt = hasFollowing
+      ? "Apagar esta mensagem e todas as mensagens seguintes?"
+      : "Apagar esta mensagem?";
+    if (!confirm(prompt)) return;
+
+    try {
+      await removeMessageAndFollowing(message);
+      setMessages((current) => current.slice(0, index));
+      setErrorHidden(true);
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : "Não foi possível apagar a mensagem.");
+    }
+  }
+
+  async function regenerateMessage(message: UIMessage, index: number) {
+    if (busy || !confirm("Substituir esta resposta por uma nova?")) return;
+
+    try {
+      await removeMessageAndFollowing(message);
+      setMessages((current) => current.slice(0, index));
+      setErrorHidden(true);
+      await regenerate();
+    } catch (regenerateError) {
+      alert(regenerateError instanceof Error ? regenerateError.message : "Não foi possível gerar uma nova resposta.");
+    }
   }
 
 
@@ -269,8 +329,17 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         <Conversation className="relative z-10 min-h-0">
           <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-4 pb-8 pt-6 sm:px-5 sm:py-8">
             {character.opening_scene && <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />}
-            {messages.map((message) => (
-              <Bubble key={message.id} role={message.role} character={character} showThoughts={showThoughts} text={message.parts.map((part) => part.type === "text" ? part.text : "").join("")} />
+            {messages.map((message, index) => (
+              <Bubble
+                key={message.id}
+                role={message.role}
+                character={character}
+                showThoughts={showThoughts}
+                text={messageText(message)}
+                busy={busy}
+                onDelete={() => void deleteMessage(message, index)}
+                onRegenerate={message.role === "assistant" ? () => void regenerateMessage(message, index) : undefined}
+              />
             ))}
             {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
             {error && !errorHidden && (
@@ -396,11 +465,15 @@ function CharacterDialog({ character, open, onOpenChange, showThoughts, onThough
   );
 }
 
-function Bubble({ role, text, character, showThoughts }: { role: string; text: string; character: Character; showThoughts: boolean }) {
+function Bubble({ role, text, character, showThoughts, busy = false, onDelete, onRegenerate }: { role: string; text: string; character: Character; showThoughts: boolean; busy?: boolean; onDelete?: () => void; onRegenerate?: () => void }) {
   if (role === "user") {
     const command = parseCommand(text);
-    if (command) return <div className="flex justify-center"><span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">{command.icon} {command.label}</span></div>;
-    return <Message from="user"><MessageContent className="whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent></Message>;
+    return (
+      <Message from="user">
+        {command ? <div className="flex justify-center"><span className="rounded-full border border-primary/40 bg-chat-glass px-4 py-1.5 text-xs text-primary">{command.icon} {command.label}</span></div> : <MessageContent className="whitespace-pre-wrap break-words rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground">{text}</MessageContent>}
+        {onDelete && <MessageActions className="justify-end opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"><MessageAction tooltip="Apagar mensagem" label="Apagar mensagem" disabled={busy} onClick={onDelete}><Trash2 className="size-3.5" /></MessageAction></MessageActions>}
+      </Message>
+    );
   }
   const segments = parseNarrativeSegments(text);
   return (
@@ -414,6 +487,12 @@ function Bubble({ role, text, character, showThoughts }: { role: string; text: s
           ),
         )}
       </MessageContent>
+      {(onRegenerate || onDelete) && (
+        <MessageActions className="px-1 opacity-70 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+          {onRegenerate && <MessageAction tooltip="Gerar novamente" label="Gerar novamente" disabled={busy} onClick={onRegenerate}><RefreshCw className="size-3.5" /></MessageAction>}
+          {onDelete && <MessageAction tooltip="Apagar mensagem" label="Apagar mensagem" disabled={busy} onClick={onDelete}><Trash2 className="size-3.5" /></MessageAction>}
+        </MessageActions>
+      )}
     </Message>
   );
 }

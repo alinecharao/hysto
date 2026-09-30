@@ -149,6 +149,7 @@ export const Route = createFileRoute("/api/chat")({
           text?: string;
           thoughts?: boolean;
           provider?: AiProvider;
+          regenerate?: boolean;
         };
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
@@ -167,10 +168,12 @@ export const Route = createFileRoute("/api/chat")({
           .order("created_at");
         if (histErr) return json(500, histErr.message);
 
-        const { error: insErr } = await supabase
-          .from("messages")
-          .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
-        if (insErr) return json(500, insErr.message);
+        if (!body.regenerate) {
+          const { error: insErr } = await supabase
+            .from("messages")
+            .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
+          if (insErr) return json(500, insErr.message);
+        }
 
         const COMMANDS: Record<string, string> = {
           advance:
@@ -228,7 +231,7 @@ export const Route = createFileRoute("/api/chat")({
             role: m.role as "user" | "assistant",
             content: asDirective(m.content),
           })),
-          { role: "user", content: asDirective(text) },
+          ...(body.regenerate ? [] : [{ role: "user" as const, content: asDirective(text) }]),
         ];
 
 
