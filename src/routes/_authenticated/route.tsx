@@ -24,7 +24,7 @@ function Layout() {
     navigate({ to: "/auth", replace: true });
   }
   return (
-    <div className="flex h-[100dvh] flex-col pt-[env(safe-area-inset-top)]">
+    <div className="flex h-[100dvh] flex-col pt-[max(env(safe-area-inset-top),48px)] sm:pt-0">
       <header className={`${isChat ? "hidden sm:flex" : "flex"} shrink-0 items-center justify-between border-b border-border px-5 py-3`}>
         <Link to="/dashboard" className="font-display text-xl italic text-primary">
           Persona
