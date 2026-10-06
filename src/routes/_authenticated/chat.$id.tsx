@@ -141,6 +141,9 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   }, [error]);
 
   const busy = status === "submitted" || status === "streaming";
+  const MOBILE_RENDER_WINDOW = 60;
+  const visibleMessageStart = Math.max(0, messages.length - MOBILE_RENDER_WINDOW);
+  const visibleMessages = messages.slice(visibleMessageStart);
 
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
@@ -161,19 +164,18 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     return [...messages].reverse().find((message) => message.role === "user") ?? null;
   }
 
-  async function removeLatestPersistedMessage(role: "user" | "assistant", text: string) {
+  async function removeLatestPersistedMessage(role: "user" | "assistant") {
     const { data, error: findError } = await supabase
       .from("messages")
       .select("id")
       .eq("character_id", character.id)
       .eq("role", role)
-      .eq("content", text)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle();
 
     if (findError) throw findError;
-    if (!data?.id) return;
+    if (!data?.id) throw new Error("Mensagem não encontrada no histórico salvo.");
 
     const { error: deleteError } = await supabase
       .from("messages")
@@ -183,8 +185,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     if (deleteError) throw deleteError;
   }
 
-  async function removeLatestPersistedUserMessage(text: string) {
-    return removeLatestPersistedMessage("user", text);
+  async function removeLatestPersistedUserMessage(_text?: string) {
+    return removeLatestPersistedMessage("user");
   }
 
   function removeLastLocalUserMessage() {
@@ -246,7 +248,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
     if (!text) return;
 
     try {
-      await removeLatestPersistedMessage("assistant", text);
+      await removeLatestPersistedMessage("assistant");
       setMessages(messages.filter((item) => item.id !== message.id));
       await qc.invalidateQueries({ queryKey: ["messages", character.id] });
     } catch (deleteError) {
@@ -337,7 +339,13 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
         <Conversation className="relative z-10 min-h-0">
           <ConversationContent className="mx-auto w-full max-w-3xl gap-5 px-4 pb-8 pt-6 sm:px-5 sm:py-8">
             {character.opening_scene && <Bubble role="assistant" text={character.opening_scene} character={character} showThoughts={showThoughts} />}
-            {messages.map((message, index) => {
+            {visibleMessageStart > 0 && (
+              <div className="py-2 text-center text-xs text-muted-foreground">
+                {visibleMessageStart} mensagens anteriores continuam salvas e foram ocultadas para manter o app leve.
+              </div>
+            )}
+            {visibleMessages.map((message, visibleIndex) => {
+              const index = visibleMessageStart + visibleIndex;
               const isLatestMessage = index === messages.length - 1;
               const canManageAssistant = message.role === "assistant" && isLatestMessage;
               const canGenerateFromUser = message.role === "user" && isLatestMessage && !error;
