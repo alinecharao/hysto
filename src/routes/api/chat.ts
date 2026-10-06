@@ -248,6 +248,49 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
+      GET: async ({ request }) => {
+        const url =
+          import.meta.env["VITE_SUPABASE_URL"] ||
+          process.env["SUPABASE_URL"];
+        const key =
+          import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+          process.env["SUPABASE_PUBLISHABLE_KEY"];
+
+        if (!url || !key) {
+          return json(500, "Supabase não está configurado corretamente.");
+        }
+
+        const token = request.headers.get("authorization")?.replace("Bearer ", "");
+        if (!token) return json(401, "Não autenticado.");
+
+        const authClient = createClient<Database>(url, key, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: claims, error: authErr } = await authClient.auth.getClaims(token);
+        if (authErr || !claims?.claims?.sub) return json(401, "Sessão inválida.");
+        const userId = claims.claims.sub;
+
+        const characterId = new URL(request.url).searchParams.get("characterId");
+        if (!characterId) return json(400, "Personagem não informado.");
+
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        const { data: messages, error } = await supabaseAdmin
+          .from("messages")
+          .select("id, role, content")
+          .eq("character_id", characterId)
+          .eq("user_id", userId)
+          .order("created_at");
+
+        if (error) return json(500, error.message);
+
+        return new Response(JSON.stringify({ messages: messages ?? [] }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        });
+      },
       POST: async ({ request }) => {
         const url =
           import.meta.env["VITE_SUPABASE_URL"] ||
