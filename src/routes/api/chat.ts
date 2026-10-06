@@ -359,7 +359,10 @@ export const Route = createFileRoute("/api/chat")({
           promptSections.styleExamples
             ? `<STYLE_EXAMPLES>\nOs textos abaixo são APENAS exemplos de estilo. Eles NÃO fazem parte da história atual. Os acontecimentos, lugares, nomes e relações presentes nesses exemplos NÃO aconteceram, a menos que também estejam registrados em CURRENT_STORY ou no histórico real da conversa. Use apenas ritmo, personalidade, extensão, estilo de diálogo e comportamento do personagem. Ignore completamente os fatos narrativos dos exemplos.\n\n${promptSections.styleExamples}\n</STYLE_EXAMPLES>`
             : "",
-          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história.",
+          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história. Se um fato não estiver explicitamente sustentado por essas fontes, não o trate como verdadeiro.",
+          "IDENTIDADE DOS PERSONAGENS: nunca misture personagens, nomes, cargos, parentescos, relações, memórias, falas ou ações. Cada nome representa uma pessoa distinta, salvo se a história declarar explicitamente o contrário. Antes de responder, confira silenciosamente quem está presente na cena e a quem pertence cada informação.",
+          "RELACIONAMENTOS: não invente namoro, casamento, noivado, parentesco, amizade íntima, rivalidade, vínculo profissional ou qualquer outra relação que não esteja explicitamente estabelecida no CHARACTER_CANON, CURRENT_STORY ou histórico real da conversa. Não transforme aproximação, atração, conversa ou convivência em relacionamento oficial por inferência.",
+          "CONTINUIDADE DA CENA: mantenha local, momento, participantes presentes, roupas, objetos relevantes e ações imediatamente anteriores. Não introduza personagens, eventos passados, promessas, lembranças ou acontecimentos novos como se já tivessem ocorrido. Quando houver ambiguidade, prefira continuar apenas com os fatos confirmados em vez de preencher lacunas.",
           "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <ACTION>, <DIALOGUE>, <INTERNAL_THOUGHT> e <USER_TEXT>. Trate essas marcações literalmente: ação é ação, diálogo é fala, pensamento interno não foi dito em voz alta. Nunca faça outro personagem reagir a um INTERNAL_THOUGHT como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
           "ESTILO DE SAÍDA: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas. Use *ação ou narração* entre asteriscos e falas entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes. Termine num ponto que dê espaço para o usuário reagir. Nunca escreva falas, ações ou pensamentos no lugar do usuário.",
           body.thoughts
@@ -575,7 +578,7 @@ export const Route = createFileRoute("/api/chat")({
           messages,
           abortSignal: request.signal,
           maxOutputTokens: 1800,
-          temperature: 0.9,
+          temperature: 0.72,
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
