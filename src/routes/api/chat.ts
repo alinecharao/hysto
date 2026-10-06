@@ -158,12 +158,16 @@ export const Route = createFileRoute("/api/chat")({
           .maybeSingle();
         if (!character) return json(404, "Personagem não encontrado.");
 
-        const { data: history, error: histErr } = await supabase
+        const WINDOW = 16;
+        const { data: latestHistory, error: histErr, count: historyCount } = await supabase
           .from("messages")
-          .select("role, content")
+          .select("role, content", { count: "exact" })
           .eq("character_id", character.id)
-          .order("created_at");
+          .order("created_at", { ascending: false })
+          .limit(WINDOW);
         if (histErr) return json(500, histErr.message);
+
+        const history = [...(latestHistory ?? [])].reverse();
 
         if (!body.regenerate) {
           const { error: insErr } = await supabase
@@ -209,13 +213,11 @@ export const Route = createFileRoute("/api/chat")({
           .filter(Boolean)
           .join("\n\n");
 
-        const full = history ?? [];
-        const WINDOW = 16;
-        const recent = full.slice(-WINDOW);
-        const trimmed = full.length > WINDOW;
+        const recent = history;
+        const trimmed = (historyCount ?? history.length) > WINDOW;
 
         const contextNote = trimmed
-          ? `CONTEXTO REDUZIDO: ${full.length - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.`
+          ? `CONTEXTO REDUZIDO: ${(historyCount ?? history.length) - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.`
           : "";
 
         const effectiveSystem = [system, contextNote].filter(Boolean).join("\n\n");

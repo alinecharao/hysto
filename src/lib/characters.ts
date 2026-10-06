@@ -69,13 +69,28 @@ export const messagesQuery = (characterId: string) =>
   queryOptions({
     queryKey: ["messages", characterId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select("id, role, content, created_at")
-        .eq("character_id", characterId)
-        .order("created_at");
-      if (error) throw error;
-      return data;
+      const pageSize = 1000;
+      const messages: Array<{
+        id: string;
+        role: string;
+        content: string;
+        created_at: string;
+      }> = [];
+
+      for (let from = 0; ; from += pageSize) {
+        const { data, error } = await supabase
+          .from("messages")
+          .select("id, role, content, created_at")
+          .eq("character_id", characterId)
+          .order("created_at")
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+
+        messages.push(...(data ?? []));
+        if (!data || data.length < pageSize) break;
+      }
+
+      return messages;
     },
     staleTime: 0,
   });
