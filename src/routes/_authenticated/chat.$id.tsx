@@ -145,12 +145,39 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   const visibleMessageStart = Math.max(0, messages.length - MOBILE_RENDER_WINDOW);
   const visibleMessages = messages.slice(visibleMessageStart);
 
+  async function deletePersistedMessages(options: { role?: "user" | "assistant"; all?: boolean }) {
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) throw new Error("Sessão não encontrada.");
+
+    const response = await fetch("/api/chat", {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        characterId: character.id,
+        ...options,
+      }),
+    });
+
+    const payload = (await response.json()) as { error?: string };
+    if (!response.ok) {
+      throw new Error(payload.error || "Não foi possível apagar a mensagem.");
+    }
+  }
+
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
-    const { error: deleteError } = await supabase.from("messages").delete().eq("character_id", character.id);
-    if (deleteError) return alert(deleteError.message);
-    setMessages([]);
-    qc.invalidateQueries({ queryKey: ["messages", character.id] });
+
+    try {
+      await deletePersistedMessages({ all: true });
+      setMessages([]);
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    } catch (deleteError) {
+      alert(deleteError instanceof Error ? deleteError.message : "Não foi possível limpar a conversa.");
+    }
   }
 
 
@@ -165,24 +192,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   }
 
   async function removeLatestPersistedMessage(role: "user" | "assistant") {
-    const { data, error: findError } = await supabase
-      .from("messages")
-      .select("id")
-      .eq("character_id", character.id)
-      .eq("role", role)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (findError) throw findError;
-    if (!data?.id) throw new Error("Mensagem não encontrada no histórico salvo.");
-
-    const { error: deleteError } = await supabase
-      .from("messages")
-      .delete()
-      .eq("id", data.id);
-
-    if (deleteError) throw deleteError;
+    await deletePersistedMessages({ role });
   }
 
   async function removeLatestPersistedUserMessage(_text?: string) {
