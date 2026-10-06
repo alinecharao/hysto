@@ -164,10 +164,10 @@ function buildCompactStoryMemory(
 ) {
   if (history.length <= recentWindow) return "";
 
-  const older = history.slice(0, -recentWindow).slice(-20);
+  const older = history.slice(0, -recentWindow).slice(-10);
   const lines = older.map((message, index) => {
     const role = message.role === "assistant" ? "PERSONAGEM" : "USUÁRIO";
-    const compact = message.content.replace(/\s+/g, " ").trim().slice(0, 320);
+    const compact = message.content.replace(/\s+/g, " ").trim().slice(0, 180);
     return `${index + 1}. ${role}: ${compact}`;
   });
 
@@ -326,7 +326,7 @@ export const Route = createFileRoute("/api/chat")({
           .join("\n\n");
 
         const full = history ?? [];
-        const WINDOW = 28;
+        const WINDOW = 16;
         const recent = full.slice(-WINDOW);
         const storyMemory = buildCompactStoryMemory(full, WINDOW);
 
@@ -461,7 +461,7 @@ export const Route = createFileRoute("/api/chat")({
                   ...requestBody,
                   messages: [
                     ...systemMessages.slice(0, 1),
-                    ...conversationMessages.slice(-6),
+                    ...conversationMessages.slice(-4),
                   ],
                   max_completion_tokens: groqMaxCompletionTokens,
                   reasoning_effort: model.startsWith("openai/gpt-oss")
