@@ -141,7 +141,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   }, [error]);
 
   const busy = status === "submitted" || status === "streaming";
-  const MOBILE_RENDER_WINDOW = 60;
+  const MOBILE_RENDER_WINDOW = 30;
   const visibleMessageStart = Math.max(0, messages.length - MOBILE_RENDER_WINDOW);
   const visibleMessages = messages.slice(visibleMessageStart);
 
