@@ -158,29 +158,6 @@ function serializeUserMessageForModel(content: string) {
   return blocks.join("\n\n");
 }
 
-function buildCompactStoryMemory(
-  history: Array<{ role: string; content: string }>,
-  recentWindow: number,
-) {
-  if (history.length <= recentWindow) return "";
-
-  const older = history.slice(0, -recentWindow).slice(-10);
-  const lines = older.map((message, index) => {
-    const role = message.role === "assistant" ? "PERSONAGEM" : "USUÁRIO";
-    const compact = message.content.replace(/\s+/g, " ").trim().slice(0, 180);
-    return `${index + 1}. ${role}: ${compact}`;
-  });
-
-  return [
-    "<STORY_MEMORY>",
-    "Registro compacto de acontecimentos anteriores desta MESMA conversa.",
-    "Use-o apenas para preservar continuidade, identidades, relações, decisões, locais e fatos já ocorridos.",
-    "Não invente detalhes ausentes e não trate exemplos de estilo como acontecimentos.",
-    ...lines,
-    "</STORY_MEMORY>",
-  ].join("\n");
-}
-
 function getProviderConfigs(request: Request): ProviderConfig[] {
   const origin = new URL(request.url).origin;
   const configs: Array<ProviderConfig | null> = [
@@ -248,60 +225,9 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
-      GET: async ({ request }) => {
-        const url =
-          import.meta.env["VITE_SUPABASE_URL"] ||
-          process.env["SUPABASE_URL"];
-        const key =
-          import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
-          process.env["SUPABASE_PUBLISHABLE_KEY"];
-
-        if (!url || !key) {
-          return json(500, "Supabase não está configurado corretamente.");
-        }
-
-        const token = request.headers.get("authorization")?.replace("Bearer ", "");
-        if (!token) return json(401, "Não autenticado.");
-
-        const authClient = createClient<Database>(url, key, {
-          global: { headers: { Authorization: `Bearer ${token}` } },
-          auth: { persistSession: false, autoRefreshToken: false },
-        });
-
-        const { data: claims, error: authErr } = await authClient.auth.getClaims(token);
-        if (authErr || !claims?.claims?.sub) return json(401, "Sessão inválida.");
-        const userId = claims.claims.sub;
-
-        const characterId = new URL(request.url).searchParams.get("characterId");
-        if (!characterId) return json(400, "Personagem não informado.");
-
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-        const { data: messages, error } = await supabaseAdmin
-          .from("messages")
-          .select("id, role, content")
-          .eq("character_id", characterId)
-          .eq("user_id", userId)
-          .order("created_at");
-
-        if (error) return json(500, error.message);
-
-        return new Response(JSON.stringify({ messages: messages ?? [] }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
-        });
-      },
       POST: async ({ request }) => {
-        const url =
-          import.meta.env["VITE_SUPABASE_URL"] ||
-          process.env["SUPABASE_URL"];
-        const key =
-          import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
-          process.env["SUPABASE_PUBLISHABLE_KEY"];
-
-        if (!url || !key) {
-          return json(500, "Supabase não está configurado corretamente.");
-        }
+        const url = process.env["SUPABASE_URL"]!;
+        const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
         const token = request.headers.get("authorization")?.replace("Bearer ", "");
         if (!token) return json(401, "Não autenticado.");
 
@@ -322,42 +248,24 @@ export const Route = createFileRoute("/api/chat")({
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
 
-        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-        const { data: character, error: characterError } = await supabaseAdmin
+        const { data: character } = await supabase
           .from("characters")
           .select("*")
           .eq("id", body.characterId)
           .maybeSingle();
-
-        if (characterError) return json(500, characterError.message);
         if (!character) return json(404, "Personagem não encontrado.");
-        if (character.user_id && character.user_id !== userId) {
-          return json(403, "Você não tem acesso a este personagem.");
-        }
 
-        const { data: history, error: histErr } = await supabaseAdmin
+        const { data: history, error: histErr } = await supabase
           .from("messages")
           .select("role, content")
           .eq("character_id", character.id)
-          .eq("user_id", userId)
           .order("created_at");
         if (histErr) return json(500, histErr.message);
 
-        const { data: savedUserMessage, error: insErr } = await supabaseAdmin
+        const { error: insErr } = await supabase
           .from("messages")
-          .insert({
-            character_id: character.id,
-            user_id: userId,
-            role: "user",
-            content: text,
-          })
-          .select("id")
-          .single();
-
-        if (insErr || !savedUserMessage) {
-          return json(500, insErr?.message || "Não foi possível salvar a mensagem.");
-        }
+          .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
+        if (insErr) return json(500, insErr.message);
 
         const COMMANDS: Record<string, string> = {
           advance:
@@ -382,9 +290,8 @@ export const Route = createFileRoute("/api/chat")({
           promptSections.styleExamples
             ? `<STYLE_EXAMPLES>\nOs textos abaixo são APENAS exemplos de estilo. Eles NÃO fazem parte da história atual. Os acontecimentos, lugares, nomes e relações presentes nesses exemplos NÃO aconteceram, a menos que também estejam registrados em CURRENT_STORY ou no histórico real da conversa. Use apenas ritmo, personalidade, extensão, estilo de diálogo e comportamento do personagem. Ignore completamente os fatos narrativos dos exemplos.\n\n${promptSections.styleExamples}\n</STYLE_EXAMPLES>`
             : "",
-          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história. Se um fato não estiver no canon, na história atual ou no histórico real recebido, não presuma que aconteceu.",
-          "IDENTIDADES: nunca misture, funda ou troque personagens. Cada nome representa uma pessoa distinta, salvo se a própria história afirmar explicitamente o contrário. Antes de responder, confira silenciosamente quem está presente na cena, quem realizou cada ação, quem possui cada relação e a quem cada fala se refere. Não atribua ao personagem principal ações, memórias, cargos, vínculos ou características pertencentes a outro personagem.",
-          "LEITURA DAS MENSAGENS DO USUÁRIO: texto entre aspas representa fala; texto entre *asteriscos* representa ação ou narração; texto entre [colchetes] representa pensamento interno. Pensamento interno NÃO foi dito em voz alta. Nunca faça outro personagem reagir ao conteúdo entre [colchetes] como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
+          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história.",
+          "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <ACTION>, <DIALOGUE>, <INTERNAL_THOUGHT> e <USER_TEXT>. Trate essas marcações literalmente: ação é ação, diálogo é fala, pensamento interno não foi dito em voz alta. Nunca faça outro personagem reagir a um INTERNAL_THOUGHT como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
           "ESTILO DE SAÍDA: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas. Use *ação ou narração* entre asteriscos e falas entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes. Termine num ponto que dê espaço para o usuário reagir. Nunca escreva falas, ações ou pensamentos no lugar do usuário.",
           body.thoughts
             ? "PENSAMENTO DO PERSONAGEM: quando houver monólogo interno, escreva-o exclusivamente como [pensamento]...[/pensamento]. Use 1 a 3 frases em primeira pessoa e coloque-o exatamente no ponto em que surge. Pensamento não é fala e não pode ser percebido por outros personagens sem uma regra explícita da história."
@@ -397,17 +304,33 @@ export const Route = createFileRoute("/api/chat")({
         const full = history ?? [];
         const WINDOW = 16;
         const recent = full.slice(-WINDOW);
+        const trimmed = full.length > WINDOW;
 
-        const effectiveSystem = system;
+        const contextNote = trimmed
+          ? `CONTEXTO REDUZIDO: ${full.length - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.`
+          : "";
+
+        const effectiveSystem = [system, contextNote].filter(Boolean).join("\n\n");
 
         const messages: ModelMessage[] = [
+          ...(character.opening_scene
+            ? [{ role: "assistant" as const, content: character.opening_scene }]
+            : []),
           ...recent.map((m) => ({
             role: m.role as "user" | "assistant",
-            content: m.role === "user" ? asDirective(m.content) : m.content,
+            content:
+              m.role === "user"
+                ? asDirective(m.content) === m.content
+                  ? serializeUserMessageForModel(m.content)
+                  : asDirective(m.content)
+                : m.content,
           })),
           {
             role: "user",
-            content: asDirective(text),
+            content:
+              asDirective(text) === text
+                ? serializeUserMessageForModel(text)
+                : asDirective(text),
           },
         ];
 
@@ -583,21 +506,17 @@ export const Route = createFileRoute("/api/chat")({
           messages,
           abortSignal: request.signal,
           maxOutputTokens: 1800,
-          temperature: 0.72,
+          temperature: 0.9,
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
-
-            const { error } = await supabaseAdmin.from("messages").insert({
+            const { error } = await supabase.from("messages").insert({
               character_id: character.id,
               user_id: userId,
               role: "assistant",
               content: reply,
             });
-
-            if (error) {
-              console.error("Falha ao salvar resposta:", error.message);
-            }
+            if (error) console.error("Falha ao salvar resposta:", error.message);
           },
         });
 
