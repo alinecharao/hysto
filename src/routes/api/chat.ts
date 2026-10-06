@@ -279,24 +279,42 @@ export const Route = createFileRoute("/api/chat")({
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
 
-        const { data: character } = await supabase
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        const { data: character, error: characterError } = await supabaseAdmin
           .from("characters")
           .select("*")
           .eq("id", body.characterId)
           .maybeSingle();
-        if (!character) return json(404, "Personagem não encontrado.");
 
-        const { data: history, error: histErr } = await supabase
+        if (characterError) return json(500, characterError.message);
+        if (!character) return json(404, "Personagem não encontrado.");
+        if (character.user_id && character.user_id !== userId) {
+          return json(403, "Você não tem acesso a este personagem.");
+        }
+
+        const { data: history, error: histErr } = await supabaseAdmin
           .from("messages")
           .select("role, content")
           .eq("character_id", character.id)
+          .eq("user_id", userId)
           .order("created_at");
         if (histErr) return json(500, histErr.message);
 
-        const { error: insErr } = await supabase
+        const { data: savedUserMessage, error: insErr } = await supabaseAdmin
           .from("messages")
-          .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
-        if (insErr) return json(500, insErr.message);
+          .insert({
+            character_id: character.id,
+            user_id: userId,
+            role: "user",
+            content: text,
+          })
+          .select("id")
+          .single();
+
+        if (insErr || !savedUserMessage) {
+          return json(500, insErr?.message || "Não foi possível salvar a mensagem.");
+        }
 
         const COMMANDS: Record<string, string> = {
           advance:
@@ -526,13 +544,17 @@ export const Route = createFileRoute("/api/chat")({
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
             if (!reply.trim()) return;
-            const { error } = await supabase.from("messages").insert({
+
+            const { error } = await supabaseAdmin.from("messages").insert({
               character_id: character.id,
               user_id: userId,
               role: "assistant",
               content: reply,
             });
-            if (error) console.error("Falha ao salvar resposta:", error.message);
+
+            if (error) {
+              console.error("Falha ao salvar resposta:", error.message);
+            }
           },
         });
 
