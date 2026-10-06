@@ -225,6 +225,75 @@ function getProviderConfigs(request: Request): ProviderConfig[] {
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
+      DELETE: async ({ request }) => {
+        const url = process.env["SUPABASE_URL"]!;
+        const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+        const token = request.headers.get("authorization")?.replace("Bearer ", "");
+        if (!token) return json(401, "Não autenticado.");
+
+        const authClient = createClient<Database>(url, key, {
+          global: { headers: { Authorization: `Bearer ${token}` } },
+          auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: claims, error: authErr } = await authClient.auth.getClaims(token);
+        if (authErr || !claims?.claims?.sub) return json(401, "Sessão inválida.");
+        const userId = claims.claims.sub;
+
+        const body = (await request.json()) as {
+          characterId?: string;
+          role?: "user" | "assistant";
+          all?: boolean;
+        };
+
+        if (!body.characterId) return json(400, "Personagem não informado.");
+
+        const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+        if (body.all) {
+          const { error } = await supabaseAdmin
+            .from("messages")
+            .delete()
+            .eq("character_id", body.characterId)
+            .eq("user_id", userId);
+
+          if (error) return json(500, error.message);
+          return new Response(JSON.stringify({ ok: true }), {
+            headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+          });
+        }
+
+        if (body.role !== "user" && body.role !== "assistant") {
+          return json(400, "Tipo de mensagem inválido.");
+        }
+
+        const { data: latest, error: findError } = await supabaseAdmin
+          .from("messages")
+          .select("id")
+          .eq("character_id", body.characterId)
+          .eq("user_id", userId)
+          .eq("role", body.role)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (findError) return json(500, findError.message);
+        if (!latest?.id) return json(404, "Mensagem não encontrada no histórico salvo.");
+
+        const { data: deleted, error: deleteError } = await supabaseAdmin
+          .from("messages")
+          .delete()
+          .eq("id", latest.id)
+          .eq("user_id", userId)
+          .select("id");
+
+        if (deleteError) return json(500, deleteError.message);
+        if (!deleted?.length) return json(500, "A mensagem não foi removida do banco.");
+
+        return new Response(JSON.stringify({ ok: true, id: latest.id }), {
+          headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+        });
+      },
       POST: async ({ request }) => {
         const url = process.env["SUPABASE_URL"]!;
         const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
