@@ -249,8 +249,16 @@ export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const url = process.env["SUPABASE_URL"]!;
-        const key = process.env["SUPABASE_PUBLISHABLE_KEY"]!;
+        const url =
+          import.meta.env["VITE_SUPABASE_URL"] ||
+          process.env["SUPABASE_URL"];
+        const key =
+          import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+          process.env["SUPABASE_PUBLISHABLE_KEY"];
+
+        if (!url || !key) {
+          return json(500, "Supabase não está configurado corretamente.");
+        }
         const token = request.headers.get("authorization")?.replace("Bearer ", "");
         if (!token) return json(401, "Não autenticado.");
 
@@ -313,9 +321,9 @@ export const Route = createFileRoute("/api/chat")({
           promptSections.styleExamples
             ? `<STYLE_EXAMPLES>\nOs textos abaixo são APENAS exemplos de estilo. Eles NÃO fazem parte da história atual. Os acontecimentos, lugares, nomes e relações presentes nesses exemplos NÃO aconteceram, a menos que também estejam registrados em CURRENT_STORY ou no histórico real da conversa. Use apenas ritmo, personalidade, extensão, estilo de diálogo e comportamento do personagem. Ignore completamente os fatos narrativos dos exemplos.\n\n${promptSections.styleExamples}\n</STYLE_EXAMPLES>`
             : "",
-          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY, STORY_MEMORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história.",
+          "HIERARQUIA DE VERDADE: CHARACTER_CANON define fatos permanentes do personagem. CURRENT_STORY e o histórico real da conversa definem o que aconteceu nesta história. STYLE_EXAMPLES nunca adiciona fatos, relações, memórias, lugares ou acontecimentos à história. Se um fato não estiver no canon, na história atual ou no histórico real recebido, não presuma que aconteceu.",
           "IDENTIDADES: nunca misture, funda ou troque personagens. Cada nome representa uma pessoa distinta, salvo se a própria história afirmar explicitamente o contrário. Antes de responder, confira silenciosamente quem está presente na cena, quem realizou cada ação, quem possui cada relação e a quem cada fala se refere. Não atribua ao personagem principal ações, memórias, cargos, vínculos ou características pertencentes a outro personagem.",
-          "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <ACTION>, <DIALOGUE>, <INTERNAL_THOUGHT> e <USER_TEXT>. Trate essas marcações literalmente: ação é ação, diálogo é fala, pensamento interno não foi dito em voz alta. Nunca faça outro personagem reagir a um INTERNAL_THOUGHT como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
+          "LEITURA DAS MENSAGENS DO USUÁRIO: texto entre aspas representa fala; texto entre *asteriscos* representa ação ou narração; texto entre [colchetes] representa pensamento interno. Pensamento interno NÃO foi dito em voz alta. Nunca faça outro personagem reagir ao conteúdo entre [colchetes] como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
           "ESTILO DE SAÍDA: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas. Use *ação ou narração* entre asteriscos e falas entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes. Termine num ponto que dê espaço para o usuário reagir. Nunca escreva falas, ações ou pensamentos no lugar do usuário.",
           body.thoughts
             ? "PENSAMENTO DO PERSONAGEM: quando houver monólogo interno, escreva-o exclusivamente como [pensamento]...[/pensamento]. Use 1 a 3 frases em primeira pessoa e coloque-o exatamente no ponto em que surge. Pensamento não é fala e não pode ser percebido por outros personagens sem uma regra explícita da história."
@@ -328,26 +336,17 @@ export const Route = createFileRoute("/api/chat")({
         const full = history ?? [];
         const WINDOW = 16;
         const recent = full.slice(-WINDOW);
-        const storyMemory = buildCompactStoryMemory(full, WINDOW);
 
-        const effectiveSystem = [system, storyMemory].filter(Boolean).join("\n\n");
+        const effectiveSystem = system;
 
         const messages: ModelMessage[] = [
           ...recent.map((m) => ({
             role: m.role as "user" | "assistant",
-            content:
-              m.role === "user"
-                ? asDirective(m.content) === m.content
-                  ? serializeUserMessageForModel(m.content)
-                  : asDirective(m.content)
-                : m.content,
+            content: m.role === "user" ? asDirective(m.content) : m.content,
           })),
           {
             role: "user",
-            content:
-              asDirective(text) === text
-                ? serializeUserMessageForModel(text)
-                : asDirective(text),
+            content: asDirective(text),
           },
         ];
 
