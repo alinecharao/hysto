@@ -74,30 +74,13 @@ export const messagesQuery = (characterId: string) =>
   queryOptions({
     queryKey: ["messages", characterId],
     queryFn: async () => {
-      const { data } = await supabase.auth.getSession();
-      const token = data.session?.access_token;
-      if (!token) throw new Error("Sessão não encontrada.");
-
-      const response = await fetch(
-        `/api/chat?characterId=${encodeURIComponent(characterId)}`,
-        {
-          headers: { Authorization: `Bearer ${token}` },
-          cache: "no-store",
-        },
-      );
-
-      const payload = (await response.json()) as {
-        messages?: { id: string; role: string; content: string }[];
-        error?: string;
-      };
-
-      if (!response.ok) {
-        throw new Error(payload.error || "Não foi possível carregar a conversa.");
-      }
-
-      return payload.messages ?? [];
+      const { data, error } = await supabase
+        .from("messages")
+        .select("id, role, content")
+        .eq("character_id", characterId)
+        .order("created_at");
+      if (error) throw error;
+      return data;
     },
     staleTime: 0,
-    gcTime: 0,
-    refetchOnMount: "always",
   });
