@@ -137,31 +137,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   });
 
   useEffect(() => {
-    if (!error) return;
-
-    setErrorHidden(false);
-
-    // The backend persists the user's message before asking the AI.
-    // Some transport failures can roll the optimistic message back locally,
-    // so reload the persisted conversation to keep the user's text visible.
-    void (async () => {
-      const { data, error: reloadError } = await supabase
-        .from("messages")
-        .select("id, role, content")
-        .eq("character_id", character.id)
-        .order("created_at");
-
-      if (reloadError || !data) return;
-
-      setMessages(
-        data.map((message) => ({
-          id: message.id,
-          role: message.role as "user" | "assistant",
-          parts: [{ type: "text" as const, text: message.content }],
-        })),
-      );
-    })();
-  }, [error, character.id, setMessages]);
+    if (error) setErrorHidden(false);
+  }, [error]);
 
   const busy = status === "submitted" || status === "streaming";
 
