@@ -227,31 +227,35 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
   }
 
   async function removeMessageAndFollowing(message: UIMessage) {
-    const { data, error: loadError } = await supabase
+    // Find the exact saved row (by id, or newest row with the same text).
+    const { data: byId } = await supabase
       .from("messages")
-      .select("id, role, content, created_at")
+      .select("id, created_at")
       .eq("character_id", character.id)
-      .order("created_at");
+      .eq("id", message.id)
+      .maybeSingle();
 
-    if (loadError) throw loadError;
-
-    const text = messageText(message);
-    let persistedIndex = (data ?? []).findIndex((item) => item.id === message.id);
-    if (persistedIndex < 0) {
-      for (let index = (data ?? []).length - 1; index >= 0; index -= 1) {
-        const item = data?.[index];
-        if (item?.role === message.role && item.content === text) {
-          persistedIndex = index;
-          break;
-        }
-      }
+    let target = byId;
+    if (!target) {
+      const { data: byText, error: findError } = await supabase
+        .from("messages")
+        .select("id, created_at")
+        .eq("character_id", character.id)
+        .eq("role", message.role)
+        .eq("content", messageText(message))
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (findError) throw findError;
+      target = byText;
     }
-    if (persistedIndex < 0) return;
+    if (!target) return;
 
-    const ids = (data ?? []).slice(persistedIndex).map((item) => item.id);
-    if (ids.length === 0) return;
-
-    const { error: deleteError } = await supabase.from("messages").delete().in("id", ids);
+    const { error: deleteError } = await supabase
+      .from("messages")
+      .delete()
+      .eq("character_id", character.id)
+      .gte("created_at", target.created_at);
     if (deleteError) throw deleteError;
   }
 
