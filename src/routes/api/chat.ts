@@ -138,16 +138,16 @@ function serializeUserMessageForModel(content: string) {
       continue;
     }
 
-    if (/^\*[^*]+\*$/.test(line)) {
+    if (/^\[[\s\S]+\]$/.test(line)) {
       blocks.push(
-        `<ACTION speaker="protagonist">\n${line.slice(1, -1).trim()}\n</ACTION>`,
+        `<MEMORY_OR_DREAM speaker="protagonist">\n${line.slice(1, -1).trim()}\n</MEMORY_OR_DREAM>`,
       );
       continue;
     }
 
-    if (/^\[[\s\S]+\]$/.test(line)) {
+    if (/^\*[^*]+\*$/.test(line)) {
       blocks.push(
-        `<INTERNAL_THOUGHT speaker="protagonist">\n${line.slice(1, -1).trim()}\n</INTERNAL_THOUGHT>`,
+        `<MENTAL_SPEECH speaker="protagonist">\n${line.slice(1, -1).trim()}\n</MENTAL_SPEECH>`,
       );
       continue;
     }
@@ -363,7 +363,7 @@ export const Route = createFileRoute("/api/chat")({
           "IDENTIDADE DOS PERSONAGENS: nunca misture personagens, nomes, cargos, parentescos, relações, memórias, falas ou ações. Cada nome representa uma pessoa distinta, salvo se a história declarar explicitamente o contrário. Antes de responder, confira silenciosamente quem está presente na cena e a quem pertence cada informação.",
           "RELACIONAMENTOS: não invente namoro, casamento, noivado, parentesco, amizade íntima, rivalidade, vínculo profissional ou qualquer outra relação que não esteja explicitamente estabelecida no CHARACTER_CANON, CURRENT_STORY ou histórico real da conversa. Não transforme aproximação, atração, conversa ou convivência em relacionamento oficial por inferência.",
           "CONTINUIDADE DA CENA: mantenha local, momento, participantes presentes, roupas, objetos relevantes e ações imediatamente anteriores. Não introduza personagens, eventos passados, promessas, lembranças ou acontecimentos novos como se já tivessem ocorrido. Quando houver ambiguidade, prefira continuar apenas com os fatos confirmados em vez de preencher lacunas.",
-          "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <ACTION>, <DIALOGUE>, <INTERNAL_THOUGHT> e <USER_TEXT>. Trate essas marcações literalmente: ação é ação, diálogo é fala, pensamento interno não foi dito em voz alta. Nunca faça outro personagem reagir a um INTERNAL_THOUGHT como se o tivesse ouvido, salvo se a história estabelecer explicitamente telepatia ou habilidade equivalente.",
+          "FORMATO SEMÂNTICO DO USUÁRIO: mensagens do usuário podem chegar marcadas como <DIALOGUE>, <MEMORY_OR_DREAM>, <MENTAL_SPEECH> e <USER_TEXT>. Trate essas marcações literalmente. <DIALOGUE> é fala em voz alta. <MEMORY_OR_DREAM> é memória, lembrança, sonho, visão ou recordação e não está necessariamente acontecendo no presente da cena. <MENTAL_SPEECH> é fala mental: pode ser apenas interna ou pode ser transmitida a outro personagem quando o contexto estabelecer explicitamente telepatia, vínculo mental ou intenção de transmissão. Não presuma transmissão sem evidência contextual. <USER_TEXT> é texto comum. Apóstrofos simples no meio de frases são apenas pontuação normal e não possuem significado narrativo especial.",
           "ESTILO DE SAÍDA: imersão cinematográfica. Escreva cenas vivas: ambiente, luz, som, gestos, micro-expressões e emoções em camadas. Use *ação ou narração* entre asteriscos e falas entre aspas. Use de 3 a 6 parágrafos curtos e sempre coloque uma linha em branco entre eles. Separe narração, cada fala e cada mudança de ação em parágrafos diferentes. Termine num ponto que dê espaço para o usuário reagir. Nunca escreva falas, ações ou pensamentos no lugar do usuário.",
           body.thoughts
             ? "PENSAMENTO DO PERSONAGEM: quando houver monólogo interno, escreva-o exclusivamente como [pensamento]...[/pensamento]. Use 1 a 3 frases em primeira pessoa e coloque-o exatamente no ponto em que surge. Pensamento não é fala e não pode ser percebido por outros personagens sem uma regra explícita da história."
