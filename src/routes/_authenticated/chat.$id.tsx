@@ -251,24 +251,17 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     }
     if (!target) return;
 
-    const { error: deleteError } = await supabase
-      .from("messages")
-      .delete()
-      .eq("character_id", character.id)
-      .gte("created_at", target.created_at);
+    // Only the chosen message is removed — never anything else.
+    const { error: deleteError } = await supabase.from("messages").delete().eq("id", target.id);
     if (deleteError) throw deleteError;
   }
 
   async function deleteMessage(message: UIMessage, index: number) {
-    const hasFollowing = index < messages.length - 1;
-    const prompt = hasFollowing
-      ? "Apagar esta mensagem e todas as mensagens seguintes?"
-      : "Apagar esta mensagem?";
-    if (!confirm(prompt)) return;
+    if (!confirm("Apagar esta mensagem?")) return;
 
     try {
       await removeMessageAndFollowing(message);
-      setMessages((current) => current.slice(0, index));
+      setMessages((current) => current.filter((_, i) => i !== index));
       setErrorHidden(true);
       await qc.invalidateQueries({ queryKey: ["messages", character.id] });
     } catch (deleteError) {
@@ -455,7 +448,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
                 text={messageText(message)}
                 busy={busy}
                 onDelete={() => void deleteMessage(message, index)}
-                {...(message.role === "assistant"
+                {...(message.role === "assistant" && index === messages.length - 1
                   ? { onRegenerate: () => void regenerateMessage(message, index) }
                   : {})}
               />
