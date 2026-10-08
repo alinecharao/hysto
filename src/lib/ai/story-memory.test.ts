@@ -92,4 +92,63 @@ describe("automatic story continuity", () => {
     expect(batch).toEqual([message(0)]);
     expect(nextMemoryBatch(history.slice(batch.length), 10000)).toEqual([message(1), message(2)]);
   });
+
+  it("finishes more than four batches in a single send without deleting messages", async () => {
+    const history = Array.from({ length: 14 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    const batches: string[][] = [];
+    const summary = await updateStoryMemory({
+      client: db.client, userId: "aline", characterId: "alden", history, budget: 1,
+      summarize: async (previous, batch) => {
+        batches.push(batch.map((m) => m.id));
+        return [previous, ...batch.map((m) => m.content)].filter(Boolean).join("\n");
+      },
+    });
+    expect(batches).toHaveLength(10);
+    expect(db.getMemory().source_ids).toEqual(history.slice(0, 10).map((m) => m.id));
+    expect(summary).toContain("evento 0.");
+    expect(summary).toContain("evento 9.");
+    expect(db.writes).toEqual(Array(11).fill("story_memories"));
+    expect(history).toHaveLength(14);
+  });
+
+  it("resumes saved progress after a provider error without repeating completed batches", async () => {
+    const history = Array.from({ length: 12 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    await expect(updateStoryMemory({
+      client: db.client, userId: "aline", characterId: "alden", history, budget: 1,
+      summarize: async (previous, batch) => {
+        if (batch[0]?.id === "5") throw new Error("Too Many Requests");
+        return `${previous}\n${batch[0]?.content}`;
+      },
+    })).rejects.toThrow("Too Many Requests");
+    expect(db.getMemory().source_ids).toEqual(["0", "1", "2", "3", "4"]);
+    const resumedIds: string[] = [];
+    await updateStoryMemory({
+      client: db.client, userId: "aline", characterId: "alden", history, budget: 1,
+      summarize: async (previous, batch) => {
+        resumedIds.push(...batch.map((m) => m.id));
+        return `${previous}\n${batch[0]?.content}`;
+      },
+    });
+    expect(resumedIds).toEqual(["5", "6", "7"]);
+    expect(db.getMemory().source_ids).toEqual(history.slice(0, 8).map((m) => m.id));
+  });
+
+  it("stops automatic continuation when the send is cancelled and retains saved memory", async () => {
+    const history = Array.from({ length: 12 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    const controller = new AbortController();
+    let calls = 0;
+    await expect(updateStoryMemory({
+      client: db.client, userId: "aline", characterId: "alden", history, budget: 1, signal: controller.signal,
+      summarize: async () => {
+        calls++;
+        controller.abort(new Error("Envio cancelado"));
+        return "Evento 0 registrado";
+      },
+    })).rejects.toThrow("Envio cancelado");
+    expect(calls).toBe(1);
+    expect(db.getMemory().source_ids).toEqual(["0"]);
+  });
 });

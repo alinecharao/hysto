@@ -1,5 +1,7 @@
 # Automatic story memory
 
+- [ ] Remove the four-batch interruption, preserve incremental progress and cancellation, and verify long-history regression tests.
+
 - [x] Restore cooldown-aware model fallback during memory updates; all 12 memory and fallback tests pass and build is OK.
 
 - [x] Add private persistent memory with safe invalidation after manual deletion.

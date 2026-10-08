@@ -388,6 +388,7 @@ export const Route = createFileRoute("/api/chat")({
         try {
           memorySummary = await updateStoryMemory({
             client: supabase, userId, characterId: character.id, history: fullHistory,
+            signal: request.signal,
             budget: orderedProviders[0]?.id === "groq" ? 10000 : 80000,
             summarize: async (previous, batch) => {
               const summary = streamText({
