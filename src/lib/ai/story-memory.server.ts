@@ -17,8 +17,8 @@ export async function readStoryHistory(client: Client, userId: string, character
   }
 }
 
-export async function updateStoryMemory({ client, userId, characterId, history, summarize, budget = 80000 }: {
-  client: Client; userId: string; characterId: string; history: MemoryMessage[]; budget?: number;
+export async function updateStoryMemory({ client, userId, characterId, history, summarize, budget = 80000, signal }: {
+  client: Client; userId: string; characterId: string; history: MemoryMessage[]; budget?: number; signal?: AbortSignal;
   summarize: (previous: string, batch: MemoryMessage[]) => Promise<string>;
 }) {
   const { error: initError } = await client.from("story_memories").upsert(
@@ -38,7 +38,10 @@ export async function updateStoryMemory({ client, userId, characterId, history, 
     throw new Error("A história mudou enquanto sua memória era organizada. Envie novamente.");
   }
   const target = memoryTarget(history);
-  for (let step = 0; memory.source_ids.length < target.length && step < 4; step++) {
+  // The fixed history target bounds this loop; each saved batch advances its prefix.
+  // Continue in the same send, rather than asking the user to resend after four batches.
+  while (memory.source_ids.length < target.length) {
+    signal?.throwIfAborted();
     const batch = nextMemoryBatch(target.slice(memory.source_ids.length), budget);
     const summary = (await summarize(memory.summary, batch)).trim();
     if (!summary) throw new Error("A IA não conseguiu atualizar a memória. Nenhuma mensagem foi apagada.");
@@ -51,9 +54,7 @@ export async function updateStoryMemory({ client, userId, characterId, history, 
     if (!data) throw new Error("A história mudou durante a atualização da memória. Envie novamente.");
     memory = data;
   }
-  if (memory.source_ids.length < target.length) {
-    throw new Error("Parte da memória já foi organizada. Esta história é longa; envie novamente para concluir sem perder acontecimentos.");
-  }
+  signal?.throwIfAborted();
   const current = await read();
   if (current.revision !== memory.revision) throw new Error("A história mudou. Envie novamente para usar a memória atualizada.");
   return current.summary;
