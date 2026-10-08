@@ -103,6 +103,41 @@ export type Database = {
           },
         ]
       }
+      story_memories: {
+        Row: {
+          character_id: string
+          revision: number
+          source_ids: string[]
+          summary: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          character_id: string
+          revision?: number
+          source_ids?: string[]
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Update: {
+          character_id?: string
+          revision?: number
+          source_ids?: string[]
+          summary?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "story_memories_character_id_fkey"
+            columns: ["character_id"]
+            isOneToOne: false
+            referencedRelation: "characters"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

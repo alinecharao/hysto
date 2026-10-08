@@ -3,6 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, type ModelMessage } from "ai";
 import type { Database } from "@/integrations/supabase/types";
+import { readStoryHistory, updateStoryMemory } from "@/lib/ai/story-memory.server";
+import { MEMORY_INSTRUCTIONS, storyMemoryContext } from "@/lib/ai/story-memory";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), {
@@ -159,22 +161,13 @@ export const Route = createFileRoute("/api/chat")({
         if (!character) return json(404, "Personagem não encontrado.");
 
         const WINDOW = 16;
-        const { data: latestHistory, error: histErr, count: historyCount } = await supabase
-          .from("messages")
-          .select("role, content", { count: "exact" })
-          .eq("character_id", character.id)
-          .order("created_at", { ascending: false })
-          .limit(WINDOW);
-        if (histErr) return json(500, histErr.message);
-
-        const history = [...(latestHistory ?? [])].reverse();
-
-        if (!body.regenerate) {
-          const { error: insErr } = await supabase
-            .from("messages")
-            .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
-          if (insErr) return json(500, insErr.message);
+        let fullHistory;
+        try {
+          fullHistory = await readStoryHistory(supabase, userId, character.id);
+        } catch (error) {
+          return json(500, error instanceof Error ? error.message : "Não foi possível ler a história.");
         }
+        const history = fullHistory.slice(-WINDOW);
 
         const COMMANDS: Record<string, string> = {
           advance:
@@ -187,7 +180,8 @@ export const Route = createFileRoute("/api/chat")({
         };
         const asDirective = (content: string) => {
           const m = content.match(/^\[\[cmd:([a-z-]+)\]\]$/);
-          return m && COMMANDS[m[1]!] ? COMMANDS[m[1]!]! : content;
+          const command = m?.[1];
+          return command ? COMMANDS[command] ?? content : content;
         };
 
         const lore = [
@@ -218,20 +212,9 @@ export const Route = createFileRoute("/api/chat")({
           .join("\n\n");
 
         const recent = history;
-        const trimmed = (historyCount ?? history.length) > WINDOW;
-
-        const contextNote = trimmed
-          ? `CONTEXTO REDUZIDO: ${(historyCount ?? history.length) - recent.length} mensagens anteriores não foram reenviadas para economizar contexto. Preserve a continuidade usando o FUNDO permanente, a cena de abertura e as mensagens recentes.`
-          : "";
-
-        const effectiveSystem = [
-          system,
-          contextNote,
-          "VERIFICAÇÃO FINAL DE PERSPECTIVA: antes de responder, verifique silenciosamente o que foi dito em voz alta, o que é perceptível e o que pertence apenas ao narrador. Para cada reação do personagem, confirme de onde ele obteve a informação. Não repita erros de respostas antigas que trataram narração interna como fala; essas respostas não são prova de que o personagem ouviu uma revelação. Continue a história sem comentar a correção e sem alterar as mensagens anteriores.",
-        ].filter(Boolean).join("\n\n");
 
         const messages: ModelMessage[] = [
-          ...(character.opening_scene
+          ...(character.opening_scene && fullHistory.length === 0
             ? [{ role: "assistant" as const, content: character.opening_scene }]
             : []),
           ...recent.map((m) => ({
@@ -301,6 +284,7 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
+        let updatingMemory = false;
         const routerFetch: typeof fetch = async (input, init) => {
           const originalBody =
             typeof init?.body === "string"
@@ -329,7 +313,7 @@ export const Route = createFileRoute("/api/chat")({
               // permanent system prompt, but trim conversational history only
               // for Groq so larger story messages still fit without weakening
               // the other providers.
-              if (provider.id === "groq" && Array.isArray(originalBody["messages"])) {
+              if (!updatingMemory && provider.id === "groq" && Array.isArray(originalBody["messages"])) {
                 const promptMessages = originalBody["messages"].filter(
                   (message): message is Record<string, unknown> =>
                     Boolean(message) && typeof message === "object",
@@ -365,6 +349,9 @@ export const Route = createFileRoute("/api/chat")({
               });
 
               if (response.ok) return response;
+
+              // Memory extraction must never bypass a denial or bill alternate attempts.
+              if (updatingMemory) return response;
 
               lastResponse = response;
 
@@ -402,6 +389,47 @@ export const Route = createFileRoute("/api/chat")({
           apiKey: "hysto-router",
           fetch: routerFetch,
         });
+
+        let memorySummary: string;
+        updatingMemory = true;
+        try {
+          memorySummary = await updateStoryMemory({
+            client: supabase, userId, characterId: character.id, history: fullHistory,
+            budget: orderedProviders[0]?.id === "groq" ? 10000 : 80000,
+            summarize: async (previous, batch) => {
+              const summary = streamText({
+                model: provider.chat("hysto-router"),
+                system: MEMORY_INSTRUCTIONS,
+                messages: [{ role: "user", content: JSON.stringify({
+                  character: { name: character.name, background: character.background, opening_scene: character.opening_scene },
+                  previous_record: previous,
+                  new_history: batch.map(({ role, content }) => ({ role, content: asDirective(content) })),
+                }) }],
+                abortSignal: request.signal,
+                maxRetries: 0,
+              });
+              return await summary.text;
+            },
+          });
+        } catch (error) {
+          const status = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
+            ? error.statusCode : 500;
+          return json(status, "Não foi possível atualizar a memória desta história. Nenhuma mensagem foi apagada. " +
+            (error instanceof Error ? error.message : "Tente novamente."));
+        } finally {
+          updatingMemory = false;
+        }
+        const effectiveSystem = [
+          system,
+          storyMemoryContext(memorySummary),
+          "VERIFICAÇÃO FINAL DE PERSPECTIVA: antes de responder, verifique silenciosamente o que foi dito em voz alta, o que é perceptível e o que pertence apenas ao narrador. Para cada reação do personagem, confirme de onde ele obteve a informação. Não repita erros de respostas antigas que trataram narração interna como fala; essas respostas não são prova de que o personagem ouviu uma revelação. Continue a história sem comentar a correção e sem alterar as mensagens anteriores.",
+        ].filter(Boolean).join("\n\n");
+
+        if (!body.regenerate) {
+          const { error: insErr } = await supabase.from("messages")
+            .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
+          if (insErr) return json(500, insErr.message);
+        }
 
         const result = streamText({
           model: provider.chat("hysto-router"),
