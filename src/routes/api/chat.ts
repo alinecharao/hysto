@@ -5,6 +5,7 @@ import { streamText, type ModelMessage } from "ai";
 import type { Database } from "@/integrations/supabase/types";
 import { readStoryHistory, updateStoryMemory } from "@/lib/ai/story-memory.server";
 import { MEMORY_INSTRUCTIONS, storyMemoryContext } from "@/lib/ai/story-memory";
+import { waitForProviderFallback } from "@/lib/ai/provider-fallback";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), {
@@ -23,10 +24,6 @@ type ProviderConfig = {
   models: string[];
   headers?: Record<string, string>;
 };
-
-const RETRYABLE_PROVIDER_STATUS = new Set([
-  401, 402, 403, 404, 408, 413, 422, 424, 429, 498, 500, 502, 503, 504,
-]);
 
 const MODEL_DAILY_LOCK_MS = 24 * 60 * 60 * 1000;
 const modelLocks = new Map<string, number>();
@@ -294,6 +291,7 @@ export const Route = createFileRoute("/api/chat")({
           if (!originalBody) return fetch(input, init);
 
           let lastResponse: Response | null = null;
+          let fallbackAttempt = 0;
 
           for (const provider of orderedProviders) {
             const headers = new Headers(init?.headers);
@@ -350,9 +348,6 @@ export const Route = createFileRoute("/api/chat")({
 
               if (response.ok) return response;
 
-              // Memory extraction must never bypass a denial or bill alternate attempts.
-              if (updatingMemory) return response;
-
               lastResponse = response;
 
               if (response.status === 429) {
@@ -364,14 +359,12 @@ export const Route = createFileRoute("/api/chat")({
                     Date.now() + MODEL_DAILY_LOCK_MS,
                   );
 
-                  // Daily quota can be model-specific. Lock only the model
-                  // that exhausted its daily allowance and immediately try
-                  // the next model from the same provider.
-                  continue;
                 }
               }
 
-              if (!RETRYABLE_PROVIDER_STATUS.has(response.status)) {
+              // Both memory and replies may recover from transient limits, but
+              // never bypass denials or retry ahead of the provider's cooldown.
+              if (!await waitForProviderFallback(response, fallbackAttempt++, request.signal)) {
                 return response;
               }
 
