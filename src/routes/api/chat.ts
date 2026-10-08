@@ -408,7 +408,12 @@ export const Route = createFileRoute("/api/chat")({
                 abortSignal: request.signal,
                 maxRetries: 0,
               });
-              return await summary.text;
+              let record = "";
+              for await (const part of summary.fullStream) {
+                if (part.type === "error") throw part.error;
+                if (part.type === "text-delta") record += part.text;
+              }
+              return record;
             },
           });
         } catch (error) {
