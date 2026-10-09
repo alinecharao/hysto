@@ -20,6 +20,7 @@
 - Browser-generated UUID message identities are reused for retries and streamed responses; user inserts are idempotent, aborts persist partial replies client-side, and requested regeneration replaces the old reply only after the new one is persisted, preventing silent loss.
 - Memory catch-up processes the fixed history target to completion within the same send, saving each batch and respecting request cancellation; no batch-count cutoff asks the user to resend merely because a story is long.
 - Memory extraction and chat share bounded, cooldown-aware model fallback only for 429 and transient 5xx responses; terminal denials never fall through, preventing memory limits from uniquely blocking recovery or bypassing provider restrictions.
+- Memory and replies share provider request preparation; memory accepts only complete visible text, preserves prior progress on empty/truncated/refused output, and logs finish metadata without story content to diagnose failures safely.
 - Deleting a chat message removes only that row; regenerate is offered only on the latest assistant turn, so no other message is ever deleted implicitly.
 - Preset characters have `user_id NULL` (readable by all signed-in users); user characters are owner-only via RLS.
 - Signed-in pages live under `src/routes/_authenticated/` (client-only gate redirecting to `/auth`).
