@@ -211,6 +211,11 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     messages: initial,
     generateId: () => crypto.randomUUID(),
     transport,
+    onError: () => {
+      const replacement = replacementRef.current;
+      replacementRef.current = null;
+      if (replacement) setMessages((current) => current.some((m) => m.id === replacement.id) ? current : [...current, replacement]);
+    },
     onFinish: async ({ message, isAbort, isDisconnect, isError }) => {
       const partial = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
       if ((isAbort || isDisconnect) && partial.trim() && cancelledSavedRef.current !== message.id) {
@@ -238,6 +243,19 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
   }, [error]);
 
   const busy = status === "submitted" || status === "streaming";
+
+  async function stopAndSave() {
+    const latest = messages.at(-1);
+    await stop();
+    if (!latest || latest.role !== "assistant") return;
+    const content = latest.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+    if (!content.trim()) return;
+    const { error: saveError } = await supabase.from("messages").upsert({
+      id: latest.id, user_id: user.id, character_id: character.id, role: "assistant", content,
+    }, { onConflict: "id", ignoreDuplicates: true });
+    if (saveError) alert("Não foi possível salvar a resposta interrompida. Mantenha esta conversa aberta.");
+    await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+  }
 
   async function clearHistory() {
     if (!confirm("Apagar toda a conversa com este personagem?")) return;
@@ -290,6 +308,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
       setErrorHidden(true);
       await regenerate({ messageId: message.id });
     } catch (regenerateError) {
+      replacementRef.current = null;
+      setMessages((current) => current.some((m) => m.id === message.id) ? current : [...current, message]);
       alert(
         regenerateError instanceof Error
           ? regenerateError.message
@@ -518,7 +538,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
               <PromptInputFooter className="absolute bottom-1 right-1 w-auto justify-end p-0">
               <PromptInputSubmit
                 status={status}
-                onStop={stop}
+                onStop={stopAndSave}
                 disabled={!busy && !input.trim()}
                 className="size-10 shrink-0 self-center rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
               />
