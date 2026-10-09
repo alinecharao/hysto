@@ -7,6 +7,7 @@ import { readStoryHistory, updateStoryMemory } from "@/lib/ai/story-memory.serve
 import { MEMORY_INSTRUCTIONS, storyMemoryContext } from "@/lib/ai/story-memory";
 import { waitForProviderFallback } from "@/lib/ai/provider-fallback";
 import { historyBeforeUserTurn, messageIdentityMatches } from "@/lib/ai/chat-history";
+import { collectMemoryOutput, MemoryOutputError, prepareProviderRequest } from "@/lib/ai/memory-output";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), {
@@ -303,7 +304,6 @@ export const Route = createFileRoute("/api/chat")({
           );
         }
 
-        let updatingMemory = false;
         const routerFetch: typeof fetch = async (input, init) => {
           const originalBody =
             typeof init?.body === "string"
@@ -327,30 +327,7 @@ export const Route = createFileRoute("/api/chat")({
             for (const model of provider.models) {
               if (getModelLockRemaining(provider.id, model) > 0) continue;
 
-              let requestBody: Record<string, unknown> = { ...originalBody, model };
-
-              // Do not silently drop unsummarized context for a smaller provider.
-              // Provider quota errors remain explicit and use bounded fallback.
-              if (!updatingMemory && provider.id === "groq" && Array.isArray(originalBody["messages"])) {
-                const promptMessages = originalBody["messages"].filter(
-                  (message): message is Record<string, unknown> =>
-                    Boolean(message) && typeof message === "object",
-                );
-                const systemMessages = promptMessages.filter(
-                  (message) => message["role"] === "system",
-                );
-                const conversationMessages = promptMessages.filter(
-                  (message) => message["role"] !== "system",
-                );
-
-                requestBody = {
-                  ...requestBody,
-                  messages: [...systemMessages, ...conversationMessages],
-                  reasoning_effort: model.startsWith("openai/gpt-oss") ? "low" : "none",
-                };
-
-                delete requestBody["max_tokens"];
-              }
+              const requestBody = prepareProviderRequest(originalBody, provider.id, model);
 
               const response = await fetch(`${provider.baseURL}/chat/completions`, {
                 ...init,
@@ -396,7 +373,6 @@ export const Route = createFileRoute("/api/chat")({
         });
 
         let memorySummary: string;
-        updatingMemory = true;
         try {
           memorySummary = await updateStoryMemory({
             client: supabase, userId, characterId: character.id, history: fullHistory,
@@ -415,21 +391,19 @@ export const Route = createFileRoute("/api/chat")({
                 abortSignal: request.signal,
                 maxRetries: 0,
               });
-              let record = "";
-              for await (const part of summary.fullStream) {
-                if (part.type === "error") throw part.error;
-                if (part.type === "text-delta") record += part.text;
-              }
-              return record;
+              return collectMemoryOutput(summary.fullStream);
             },
           });
         } catch (error) {
+          if (error instanceof MemoryOutputError) {
+            // Metadata only: never log story content or provider credentials.
+            console.warn("story_memory_output_failed", { finishReason: error.finishReason });
+            return json(422, error.message);
+          }
           const status = error && typeof error === "object" && "statusCode" in error && typeof error.statusCode === "number"
             ? error.statusCode : 500;
           return json(status, "Não foi possível atualizar a memória desta história. Nenhuma mensagem foi apagada. " +
             (error instanceof Error ? error.message : "Tente novamente."));
-        } finally {
-          updatingMemory = false;
         }
         const effectiveSystem = [
           system,
