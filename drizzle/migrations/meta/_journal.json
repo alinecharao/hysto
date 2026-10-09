@@ -8,6 +8,13 @@
       "when": 1791498807373,
       "tag": "0000_automatic_story_memory",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791506303209,
+      "tag": "0001_preserve_unaffected_story_memory_and_message_identity",
+      "breakpoints": true
     }
   ]
 }
