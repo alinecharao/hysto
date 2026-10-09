@@ -572,6 +572,7 @@ export const Route = createFileRoute("/api/chat")({
           fetch: routerFetch,
         });
 
+        let savedAssistant = false;
         const result = streamText({
           model: provider.chat("hysto-router"),
           system: effectiveSystem,
@@ -580,20 +581,35 @@ export const Route = createFileRoute("/api/chat")({
           maxOutputTokens: 1800,
           temperature: 0.72,
           maxRetries: 0,
-          onFinish: async ({ text: reply }) => {
-            if (!reply.trim()) return;
+          onFinish: async ({ text: reply, finishReason }) => {
+            if (!reply.trim() || savedAssistant) return;
             const { error } = await supabase.from("messages").insert({
               character_id: character.id,
               user_id: userId,
               role: "assistant",
               content: reply,
             });
-            if (error) console.error("Falha ao salvar resposta:", error.message);
+            if (error) {
+              console.error("Falha ao salvar resposta:", {
+                message: error.message,
+                code: error.code,
+                finishReason,
+                characterId: character.id,
+              });
+              return;
+            }
+            savedAssistant = true;
+          },
+          onError: (event) => {
+            console.error("Falha durante o streaming do Hysto:", event.error);
           },
         });
 
         return result.toUIMessageStreamResponse({
-          onError: (e) => (e instanceof Error ? e.message : "Erro ao gerar resposta."),
+          onError: (e) => {
+            console.error("Erro ao converter stream para UI:", e);
+            return e instanceof Error ? e.message : "Erro ao gerar resposta.";
+          },
         });
       },
     },
