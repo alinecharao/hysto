@@ -211,6 +211,11 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     messages: initial,
     generateId: () => crypto.randomUUID(),
     transport,
+    onError: () => {
+      const replacement = replacementRef.current;
+      replacementRef.current = null;
+      if (replacement) setMessages((current) => current.some((m) => m.id === replacement.id) ? current : [...current, replacement]);
+    },
     onFinish: async ({ message, isAbort, isDisconnect, isError }) => {
       const partial = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
       if ((isAbort || isDisconnect) && partial.trim() && cancelledSavedRef.current !== message.id) {
@@ -290,6 +295,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
       setErrorHidden(true);
       await regenerate({ messageId: message.id });
     } catch (regenerateError) {
+      replacementRef.current = null;
+      setMessages((current) => current.some((m) => m.id === message.id) ? current : [...current, message]);
       alert(
         regenerateError instanceof Error
           ? regenerateError.message

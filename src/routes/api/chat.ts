@@ -329,10 +329,8 @@ export const Route = createFileRoute("/api/chat")({
 
               let requestBody: Record<string, unknown> = { ...originalBody, model };
 
-              // Groq's free/on-demand TPM is relatively small. Keep the
-              // permanent system prompt, but trim conversational history only
-              // for Groq so larger story messages still fit without weakening
-              // the other providers.
+              // Do not silently drop unsummarized context for a smaller provider.
+              // Provider quota errors remain explicit and use bounded fallback.
               if (!updatingMemory && provider.id === "groq" && Array.isArray(originalBody["messages"])) {
                 const promptMessages = originalBody["messages"].filter(
                   (message): message is Record<string, unknown> =>
@@ -450,7 +448,6 @@ export const Route = createFileRoute("/api/chat")({
           system: effectiveSystem,
           messages,
           abortSignal: request.signal,
-          temperature: 0.5,
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
             if (request.signal.aborted) return;
