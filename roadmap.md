@@ -15,5 +15,5 @@
 - [x] Verify scoped reads, automatic incremental updates, deletion safety, and stale-write prevention with seven passing tests; confirm a live summary persists names and old events and deleting one temporary message invalidates only memory.
 - [x] Complete live follow-up continuity verification — Elara/Kaelen relationship and library location preserved; new story response completed in approximately 8 seconds. Large unsummarized backlogs still require catch-up before replying.
 ## Empty memory response
-- [ ] Diagnose empty memory responses and preserve terminal provider errors.
-- [ ] Correct memory request handling and verify preservation regressions.
+- [x] Identify inconsistent Groq reasoning configuration between memory and replies; report finish reasons without private content. The exact upstream cause of the earlier empty response was not recorded and remains unconfirmed.
+- [x] Share provider preparation, reject empty/refused/truncated records without overwriting saved memory, and verify 26 regressions plus a live HTTP 200 memory extraction preserving fictitious names; build OK.
