@@ -27,7 +27,7 @@ export async function collectMemoryOutput(stream: AsyncIterable<MemoryStreamPart
 }
 
 export function prepareProviderRequest(body: Record<string, unknown>, provider: string, model: string) {
-  const prepared = { ...body, model };
+  const prepared: Record<string, unknown> = { ...body, model };
   if (provider === "groq") {
     prepared["reasoning_effort"] = model.startsWith("openai/gpt-oss") ? "low" : "none";
   }

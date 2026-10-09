@@ -63,6 +63,19 @@ describe("automatic story continuity", () => {
     expect(db.writes.every((table) => table === "story_memories")).toBe(true);
   });
 
+  it("preserves saved memory and source identities when the next summary is empty", async () => {
+    const history = Array.from({ length: 8 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    await updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden", history, budget: 1,
+      summarize: async (previous, batch) => `${previous}\n${batch[0]?.content}` });
+    const saved = { ...db.getMemory(), source_ids: [...db.getMemory().source_ids] };
+    await expect(updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden",
+      history: [...history, message(8), message(9)], summarize: async () => " " })).rejects.toThrow("não conseguiu");
+    expect(db.getMemory()).toEqual(saved);
+    expect(db.writes.every((table) => table === "story_memories")).toBe(true);
+    expect(history).toHaveLength(8);
+  });
+
   it("does not re-summarize facts already saved", async () => {
     const history = Array.from({ length: 6 }, (_, i) => message(i));
     const db = fakeDatabase(history);
