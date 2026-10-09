@@ -141,6 +141,18 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
   }, [error]);
 
   const busy = status === "submitted" || status === "streaming";
+  const readableChatError = useMemo(() => {
+    const raw = error?.message?.trim();
+    if (!raw) return "Não foi possível obter resposta.";
+    try {
+      const parsed = JSON.parse(raw) as { error?: unknown; message?: unknown };
+      if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error;
+      if (typeof parsed.message === "string" && parsed.message.trim()) return parsed.message;
+    } catch {
+      // A mensagem não é JSON: exibe o texto original.
+    }
+    return raw;
+  }, [error]);
   const MOBILE_RENDER_WINDOW = 15;
   const visibleMessageStart = Math.max(0, messages.length - MOBILE_RENDER_WINDOW);
   const visibleMessages = messages.slice(visibleMessageStart);
@@ -410,7 +422,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: { id:
             {status === "submitted" && <Shimmer className="pl-2 text-sm">{`${character.name} está escrevendo...`}</Shimmer>}
             {error && !errorHidden && (
               <div className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-                <p>{error.message || "Não foi possível obter resposta."}</p>
+                <p>{readableChatError}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Button
                     type="button"
