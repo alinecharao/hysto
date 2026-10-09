@@ -1,10 +1,10 @@
 # Automatic story memory
 
 ## Personal chat review
-- [ ] Make retries idempotent and preserve every message unless explicitly deleted.
-- [ ] Preserve unaffected memory after deletion; reduce redundant memory calls and context truncation.
-- [ ] Strengthen canonical names, chronology and character knowledge without changing saved conversations.
-- [ ] Verify regression tests and live chat behavior, including long histories and cancellation.
+- [x] Make retries idempotent and preserve every message unless explicitly deleted.
+- [x] Preserve unaffected memory after deletion; reduce redundant memory calls and context truncation.
+- [x] Strengthen canonical names, chronology and character knowledge without changing saved conversations.
+- [x] Verify 20 regression tests, load a 600-response story, and confirm live persistence, reload, failed regeneration preservation, cancellation saving and conflicting retry rejection using a temporary story.
 
 - [x] Remove the four-batch interruption, preserve incremental progress and cancellation, and verify long-history regression tests — all 15 memory/fallback tests pass; build OK.
 
@@ -13,4 +13,4 @@
 - [x] Add private persistent memory with safe invalidation after manual deletion.
 - [x] Build automatic history summarization and include memory in every provider's context.
 - [x] Verify scoped reads, automatic incremental updates, deletion safety, and stale-write prevention with seven passing tests; confirm a live summary persists names and old events and deleting one temporary message invalidates only memory.
-- [ ] Complete live follow-up continuity verification — blocked by the configured AI service's temporary rate limit (429).
+- [x] Complete live follow-up continuity verification — Elara/Kaelen relationship and library location preserved; new story response completed in approximately 8 seconds. Large unsummarized backlogs still require catch-up before replying.
