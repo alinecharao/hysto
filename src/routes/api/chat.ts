@@ -240,7 +240,7 @@ export const Route = createFileRoute("/api/chat")({
             role: m.role as "user" | "assistant",
             content: asDirective(m.content),
           })),
-          ...(body.regenerate ? [] : [{ role: "user" as const, content: asDirective(text) }]),
+          ...(body.regenerate && !userMessageId ? [] : [{ role: "user" as const, content: asDirective(text) }]),
         ];
 
         const requestedProvider: AiProvider =
