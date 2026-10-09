@@ -1,5 +1,11 @@
 # Automatic story memory
 
+## Personal chat review
+- [ ] Make retries idempotent and preserve every message unless explicitly deleted.
+- [ ] Preserve unaffected memory after deletion; reduce redundant memory calls and context truncation.
+- [ ] Strengthen canonical names, chronology and character knowledge without changing saved conversations.
+- [ ] Verify regression tests and live chat behavior, including long histories and cancellation.
+
 - [x] Remove the four-batch interruption, preserve incremental progress and cancellation, and verify long-history regression tests — all 15 memory/fallback tests pass; build OK.
 
 - [x] Restore cooldown-aware model fallback during memory updates; all 12 memory and fallback tests pass and build is OK.

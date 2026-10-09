@@ -28,6 +28,7 @@ import {
 import {
   PromptInput,
   PromptInputSubmit,
+  PromptInputFooter,
   PromptInputTextarea,
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
@@ -141,6 +142,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
   const [openInfo, setOpenInfo] = useState(false);
   const [aiProvider, setAiProvider] = useState<AiProvider>("auto");
   const [errorHidden, setErrorHidden] = useState(false);
+  const replacementRef = useRef<UIMessage | null>(null);
+  const cancelledSavedRef = useRef<string | null>(null);
   const thoughtsRef = useRef(showThoughts);
   const aiProviderRef = useRef<AiProvider>(aiProvider);
   thoughtsRef.current = showThoughts;
@@ -184,7 +187,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
           return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
         },
         prepareSendMessagesRequest: ({ messages, headers, trigger }) => {
-          const last = messages[messages.length - 1];
+          const last = [...messages].reverse().find((message) => message.role === "user");
           const text = (last?.parts ?? [])
             .map((part) => (part.type === "text" ? part.text : ""))
             .join("");
@@ -192,6 +195,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
             ...(headers ? { headers } : {}),
             body: {
               characterId: character.id,
+              userMessageId: last?.id,
               text,
               thoughts: thoughtsRef.current,
               provider: aiProviderRef.current,
@@ -205,8 +209,28 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
   const { messages, sendMessage, regenerate, status, error, setMessages, stop } = useChat({
     id: character.id,
     messages: initial,
+    generateId: () => crypto.randomUUID(),
     transport,
-    onFinish: () => qc.invalidateQueries({ queryKey: ["messages", character.id] }),
+    onFinish: async ({ message, isAbort, isDisconnect, isError }) => {
+      const partial = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+      if ((isAbort || isDisconnect) && partial.trim() && cancelledSavedRef.current !== message.id) {
+        cancelledSavedRef.current = message.id;
+        const { error: saveError } = await supabase.from("messages").upsert({
+          id: message.id, user_id: user.id, character_id: character.id, role: "assistant", content: partial,
+        }, { onConflict: "id", ignoreDuplicates: true });
+        if (saveError) alert("Não foi possível salvar a resposta interrompida. Mantenha esta conversa aberta.");
+      }
+      const replacement = replacementRef.current;
+      replacementRef.current = null;
+      if (replacement && !isAbort && !isDisconnect && !isError && partial.trim()) {
+        // Replace only after confirming the new response is safely persisted.
+        const { data: saved } = await supabase.from("messages").select("id").eq("id", message.id).maybeSingle();
+        if (saved) await removeMessageAndFollowing(replacement);
+      } else if (replacement) {
+        setMessages((current) => current.some((m) => m.id === replacement.id) ? current : [...current, replacement]);
+      }
+      await qc.invalidateQueries({ queryKey: ["messages", character.id] });
+    },
   });
 
   useEffect(() => {
@@ -235,20 +259,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
       .eq("id", message.id)
       .maybeSingle();
 
-    let target = byId;
-    if (!target) {
-      const { data: byText, error: findError } = await supabase
-        .from("messages")
-        .select("id, created_at")
-        .eq("character_id", character.id)
-        .eq("role", message.role)
-        .eq("content", messageText(message))
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (findError) throw findError;
-      target = byText;
-    }
+    const target = byId;
     if (!target) return;
 
     // Only the chosen message is removed — never anything else.
@@ -275,7 +286,7 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     if (busy || !confirm("Substituir esta resposta por uma nova?")) return;
 
     try {
-      await removeMessageAndFollowing(message);
+      replacementRef.current = message;
       setErrorHidden(true);
       await regenerate({ messageId: message.id });
     } catch (regenerateError) {
@@ -295,41 +306,6 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     return [...messages].reverse().find((message) => message.role === "user") ?? null;
   }
 
-  async function removeLatestPersistedUserMessage(text: string) {
-    const { data, error: findError } = await supabase
-      .from("messages")
-      .select("id")
-      .eq("character_id", character.id)
-      .eq("role", "user")
-      .eq("content", text)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (findError) throw findError;
-    if (!data?.id) return;
-
-    const { error: deleteError } = await supabase.from("messages").delete().eq("id", data.id);
-
-    if (deleteError) throw deleteError;
-  }
-
-  function removeLastLocalUserMessage() {
-    let removed = false;
-    const next = [...messages]
-      .reverse()
-      .filter((message) => {
-        if (!removed && message.role === "user") {
-          removed = true;
-          return false;
-        }
-        return true;
-      })
-      .reverse();
-
-    setMessages(next);
-  }
-
   async function deleteFailedMessage() {
     const message = lastUserMessage();
     if (!message) {
@@ -338,9 +314,9 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     }
 
     try {
-      const text = messageText(message);
-      await removeLatestPersistedUserMessage(text);
-      removeLastLocalUserMessage();
+      if (!confirm("Apagar esta mensagem?")) return;
+      await removeMessageAndFollowing(message);
+      setMessages((current) => current.filter((m) => m.id !== message.id));
       setErrorHidden(true);
       await qc.invalidateQueries({ queryKey: ["messages", character.id] });
     } catch (deleteError) {
@@ -358,10 +334,8 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
     if (!text) return;
 
     try {
-      await removeLatestPersistedUserMessage(text);
-      removeLastLocalUserMessage();
       setErrorHidden(true);
-      await sendMessage({ text });
+      await regenerate({ messageId: message.id });
     } catch (retryError) {
       alert(
         retryError instanceof Error ? retryError.message : "Não foi possível reenviar a mensagem.",
@@ -539,14 +513,16 @@ function ChatWindow({ character, stored }: { character: Character; stored: Store
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder="Escreva sua mensagem..."
-                className="min-h-14 max-h-36 overflow-y-auto py-4 pl-4 pr-3 text-base leading-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                className="min-h-14 max-h-36 overflow-y-auto py-4 pl-4 pr-16 text-base leading-6 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               />
+              <PromptInputFooter className="absolute bottom-1 right-1 w-auto justify-end p-0">
               <PromptInputSubmit
                 status={status}
                 onStop={stop}
                 disabled={!busy && !input.trim()}
-                className="mr-2 size-10 shrink-0 self-center rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
+                className="size-10 shrink-0 self-center rounded-full bg-chat-action text-primary-foreground hover:bg-chat-action/90"
               />
+              </PromptInputFooter>
             </PromptInput>
           </div>
         </footer>

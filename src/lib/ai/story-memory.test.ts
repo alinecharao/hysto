@@ -73,6 +73,31 @@ describe("automatic story continuity", () => {
     expect(calls).toBe(1);
   });
 
+  it("avoids memory calls while all pending messages fit verbatim in the 16-message prompt", async () => {
+    const history = Array.from({ length: 16 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    let calls = 0;
+    const summarize = async () => { calls++; return "Elara é irmã de Kaelen."; };
+    await updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden", history, recentWindow: 16, summarize });
+    expect(calls).toBe(0);
+    await updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden", history: [...history, message(16)], recentWindow: 16, summarize });
+    expect(calls).toBe(1);
+    expect(db.getMemory().source_ids).toEqual(Array.from({ length: 13 }, (_, i) => String(i)));
+  });
+
+  it("preserves valid memory when a deleted turn was outside its sources", async () => {
+    const history = Array.from({ length: 8 }, (_, i) => message(i));
+    const db = fakeDatabase(history);
+    let calls = 0;
+    const summarize = async () => { calls++; return "Elara é irmã de Kaelen."; };
+    await updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden", history, summarize });
+    const withoutLatest = history.slice(0, -1);
+    expect(memoryPrefixIsValid(db.getMemory(), withoutLatest)).toBe(true);
+    await updateStoryMemory({ client: db.client, userId: "aline", characterId: "alden", history: withoutLatest, recentWindow: 16, summarize });
+    expect(calls).toBe(1);
+    expect(db.getMemory().summary).toBe("Elara é irmã de Kaelen.");
+  });
+
   it("rejects a derived memory when a manually deleted source no longer exists", () => {
     const memory = { summary: "Alden encontrou Elara", source_ids: ["0", "1"], revision: 1 };
     expect(memoryPrefixIsValid(memory, [message(0), message(1)])).toBe(true);
