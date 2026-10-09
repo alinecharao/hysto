@@ -17,8 +17,9 @@ export async function readStoryHistory(client: Client, userId: string, character
   }
 }
 
-export async function updateStoryMemory({ client, userId, characterId, history, summarize, budget = 80000, signal }: {
+export async function updateStoryMemory({ client, userId, characterId, history, summarize, budget = 80000, signal, recentWindow = 4 }: {
   client: Client; userId: string; characterId: string; history: MemoryMessage[]; budget?: number; signal?: AbortSignal;
+  recentWindow?: number;
   summarize: (previous: string, batch: MemoryMessage[]) => Promise<string>;
 }) {
   const { error: initError } = await client.from("story_memories").upsert(
@@ -38,6 +39,8 @@ export async function updateStoryMemory({ client, userId, characterId, history, 
     throw new Error("A história mudou enquanto sua memória era organizada. Envie novamente.");
   }
   const target = memoryTarget(history);
+  // All pending turns remain verbatim in the prompt; avoid a redundant AI call.
+  if (history.length - memory.source_ids.length <= recentWindow) return memory.summary;
   // The fixed history target bounds this loop; each saved batch advances its prefix.
   // Continue in the same send, rather than asking the user to resend after four batches.
   while (memory.source_ids.length < target.length) {

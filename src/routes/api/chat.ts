@@ -6,6 +6,7 @@ import type { Database } from "@/integrations/supabase/types";
 import { readStoryHistory, updateStoryMemory } from "@/lib/ai/story-memory.server";
 import { MEMORY_INSTRUCTIONS, storyMemoryContext } from "@/lib/ai/story-memory";
 import { waitForProviderFallback } from "@/lib/ai/provider-fallback";
+import { historyBeforeUserTurn, messageIdentityMatches } from "@/lib/ai/chat-history";
 
 const json = (status: number, error: string) =>
   new Response(JSON.stringify({ error }), {
@@ -146,6 +147,7 @@ export const Route = createFileRoute("/api/chat")({
           thoughts?: boolean;
           provider?: AiProvider;
           regenerate?: boolean;
+          userMessageId?: string;
         };
         const text = body.text?.trim();
         if (!body.characterId || !text) return json(400, "Mensagem vazia.");
@@ -157,10 +159,30 @@ export const Route = createFileRoute("/api/chat")({
           .maybeSingle();
         if (!character) return json(404, "Personagem não encontrado.");
 
+        const userMessageId = body.userMessageId;
+        if (userMessageId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userMessageId)) {
+          return json(400, "Identificação de mensagem inválida. Atualize a conversa.");
+        }
+        const assistantMessageId = crypto.randomUUID();
+        if (userMessageId) {
+          const { data: existing, error: readError } = await supabase.from("messages").select("user_id, character_id, role, content")
+            .eq("id", userMessageId).maybeSingle();
+          if (readError) return json(500, "Não foi possível verificar a mensagem.");
+          if (existing && !messageIdentityMatches(existing, userId, character.id, text)) return json(409, "A mensagem mudou. Atualize a conversa.");
+          if (!existing) {
+            const { error: saveError } = await supabase.from("messages").upsert({
+              id: userMessageId, user_id: userId, character_id: character.id, role: "user", content: text,
+            }, { onConflict: "id", ignoreDuplicates: true });
+            if (saveError) return json(500, "Não foi possível salvar sua mensagem.");
+          }
+        }
+
+
         const WINDOW = 16;
         let fullHistory;
         try {
           fullHistory = await readStoryHistory(supabase, userId, character.id);
+          fullHistory = historyBeforeUserTurn(fullHistory, userMessageId);
         } catch (error) {
           return json(500, error instanceof Error ? error.message : "Não foi possível ler a história.");
         }
@@ -198,7 +220,7 @@ export const Route = createFileRoute("/api/chat")({
           'SEPARAÇÃO ENTRE NARRAÇÃO E FALA: aspas são reservadas exclusivamente às palavras que o personagem realmente pronuncia em voz alta na cena. Descrições do ambiente, ações, sensações, explicações, lembranças e transições de cena são narração em *itálico*, nunca diálogo. Uma frase em primeira pessoa não é automaticamente uma fala. Ao mostrar uma lembrança ou flashback, apresente o passado como narração; só inclua diálogo dentro da lembrança quando houver alguém realmente falando naquele momento passado e deixe esse contexto explícito. Não transforme o conteúdo do FUNDO, da cena de abertura ou uma descrição escrita pelo usuário em palavras pronunciadas pelo personagem. Exemplo: *O cheiro da chuva trouxe a lembrança da casa onde cresceu. Ele pousou a mão na janela.* Depois, em outro parágrafo, a fala real: "Vamos esperar a chuva passar." Antes de responder, confira se cada trecho entre aspas é algo dito em voz alta e devolva qualquer descrição ou lembrança indevidamente entre aspas à narração.',
           'LEITURA DA MENSAGEM DO USUÁRIO — LIMITE DE CONHECIMENTO: você lê o texto inteiro para compreender a história, mas o personagem não ouve nem sabe automaticamente tudo que está escrito. Separe internamente cada mensagem em fala efetivamente pronunciada, ação ou acontecimento perceptível na cena e narração interna (pensamentos, sentimentos, avaliações, lembranças e informações ao narrador). Essa separação é silenciosa; não mostre rótulos nem peça ao usuário para reformatar o texto. Primeira pessoa, texto sem itálico e ausência de aspas NÃO tornam uma descrição uma fala. Reconheça falas pelo contexto explícito de alguém falando, como disse, perguntei ou respondi, por aspas usadas como diálogo ou travessão de diálogo; aspas em lembranças ou citações não significam uma fala no presente. Não trate uma mensagem mista como um único discurso.',
           'PERCEPÇÃO DO PERSONAGEM: responda às falas dirigidas a ele, às ações que ele pode observar e aos fatos que ele já aprendeu dentro da história. Sentimentos ou lembranças narrados pelo usuário não são uma confissão. Não responda, console, aconselhe, cite ou faça perguntas sobre seu conteúdo privado como se tivesse sido revelado. Uma expressão ou gesto visível pode sugerir uma emoção, mas não revela sua causa, a lembrança exata ou detalhes do passado. Conhecimento do narrador, FUNDO e monólogo interno não concedem telepatia; só use um acesso especial quando a história o estabelecer explicitamente. Em um trecho inteiramente interno, continue apenas a cena perceptível, sem inventar uma fala do usuário.',
-          'EXEMPLO DE MENSAGEM MISTA: o usuário narra sentir inveja da infância de uma versão de Aline, descreve sofrimento passado e depois escreve: Virei para Alden e disse "Preciso falar com Elara e Kaelen, depois descanso. Quanto mais rápido souber, melhor." Alden percebe a pessoa se virar e ouve SOMENTE o pedido sobre Elara e Kaelen e o descanso. Ele pode responder ao pedido e agir de acordo com a cena, mas não mencionar a inveja, a infância, o sofrimento ou a família só porque o narrador os descreveu; só poderia conhecer esses fatos se já tivessem sido revelados a ele na história. Não copie este exemplo nem acrescente seus nomes ou fatos a outras histórias.',
+          'MENSAGENS MISTAS: quando houver uma lembrança privada seguida de uma fala explícita, o personagem ouve apenas a fala e percebe apenas a ação visível. Não mencione o conteúdo privado como revelação; não importe nomes nem acontecimentos de exemplos ou de outras histórias.',
           "CONTINUIDADE: mantenha coerência com tudo o que já aconteceu — nomes, promessas, ferimentos, mudanças de relação, hora e lugar. Nunca contradiga o FUNDO nem repita cenas já vividas.",
           body.thoughts
             ? "PENSAMENTO: insira o monólogo interno do personagem dentro de <thought>...</thought> exatamente no ponto da cena em que ele surge — normalmente depois da ação, percepção ou fala que o provoca. Não coloque o pensamento automaticamente no início. Você pode intercalá-lo entre narração e falas, usando no total 1 a 3 frases em primeira pessoa, sinceras e que podem divergir do que o personagem diz em voz alta."
@@ -323,17 +345,9 @@ export const Route = createFileRoute("/api/chat")({
                   (message) => message["role"] !== "system",
                 );
 
-                const groqMaxCompletionTokens = Math.min(
-                  typeof originalBody["max_tokens"] === "number"
-                    ? originalBody["max_tokens"]
-                    : 1600,
-                  1600,
-                );
-
                 requestBody = {
                   ...requestBody,
-                  messages: [...systemMessages.slice(0, 1), ...conversationMessages.slice(-4)],
-                  max_completion_tokens: groqMaxCompletionTokens,
+                  messages: [...systemMessages, ...conversationMessages],
                   reasoning_effort: model.startsWith("openai/gpt-oss") ? "low" : "none",
                 };
 
@@ -389,6 +403,7 @@ export const Route = createFileRoute("/api/chat")({
           memorySummary = await updateStoryMemory({
             client: supabase, userId, characterId: character.id, history: fullHistory,
             signal: request.signal,
+            recentWindow: WINDOW,
             budget: orderedProviders[0]?.id === "groq" ? 10000 : 80000,
             summarize: async (previous, batch) => {
               const summary = streamText({
@@ -424,7 +439,7 @@ export const Route = createFileRoute("/api/chat")({
           "VERIFICAÇÃO FINAL DE PERSPECTIVA: antes de responder, verifique silenciosamente o que foi dito em voz alta, o que é perceptível e o que pertence apenas ao narrador. Para cada reação do personagem, confirme de onde ele obteve a informação. Não repita erros de respostas antigas que trataram narração interna como fala; essas respostas não são prova de que o personagem ouviu uma revelação. Continue a história sem comentar a correção e sem alterar as mensagens anteriores.",
         ].filter(Boolean).join("\n\n");
 
-        if (!body.regenerate) {
+        if (!body.regenerate && !userMessageId) {
           const { error: insErr } = await supabase.from("messages")
             .insert({ character_id: character.id, user_id: userId, role: "user", content: text });
           if (insErr) return json(500, insErr.message);
@@ -435,22 +450,24 @@ export const Route = createFileRoute("/api/chat")({
           system: effectiveSystem,
           messages,
           abortSignal: request.signal,
-          maxOutputTokens: 1800,
-          temperature: 0.9,
+          temperature: 0.5,
           maxRetries: 0,
           onFinish: async ({ text: reply }) => {
+            if (request.signal.aborted) return;
             if (!reply.trim()) return;
             const { error } = await supabase.from("messages").insert({
               character_id: character.id,
               user_id: userId,
+              id: assistantMessageId,
               role: "assistant",
               content: reply,
             });
-            if (error) console.error("Falha ao salvar resposta:", error.message);
+            if (error) throw new Error("Não foi possível salvar a resposta. Mantenha a conversa aberta e tente novamente.");
           },
         });
 
         return result.toUIMessageStreamResponse({
+          generateMessageId: () => assistantMessageId,
           onError: (e) => (e instanceof Error ? e.message : "Erro ao gerar resposta."),
         });
       },

@@ -83,6 +83,7 @@ export const messagesQuery = (characterId: string) =>
           .select("id, role, content, created_at")
           .eq("character_id", characterId)
           .order("created_at")
+          .order("id")
           .range(from, from + pageSize - 1);
         if (error) throw error;
 
