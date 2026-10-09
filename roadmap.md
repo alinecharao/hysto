@@ -14,3 +14,6 @@
 - [x] Build automatic history summarization and include memory in every provider's context.
 - [x] Verify scoped reads, automatic incremental updates, deletion safety, and stale-write prevention with seven passing tests; confirm a live summary persists names and old events and deleting one temporary message invalidates only memory.
 - [x] Complete live follow-up continuity verification — Elara/Kaelen relationship and library location preserved; new story response completed in approximately 8 seconds. Large unsummarized backlogs still require catch-up before replying.
+## Empty memory response
+- [ ] Diagnose empty memory responses and preserve terminal provider errors.
+- [ ] Correct memory request handling and verify preservation regressions.
